@@ -1,2 +1,8 @@
-# PortfolioHub_Meu-Portfolio-Online
-um site de portfólio pessoal onde eu possa reunir e organizar links para meus projetos, permitindo que visitantes conheçam meu trabalho de forma simples e visualmente agradável. O objetivo é oferecer uma vitrine acessível e responsiva para destacar minhas habilidades, experiências e conquistas.
+# Lista de Compras online
+
+Quero criar uma lista de coisas que estão faltando para serem comprados. 
+A idéia é que as pessoas que estejam conectadas a aplicação, receba uma notificação acerca de uma nova adição a essa lista.
+
+ex.: 
+    café acabou, eu vou na aplicação, adiciono o café à lista e minha mãe, que está conctada a aplicação, recebe uma notifição acerca dessa adição.
+
