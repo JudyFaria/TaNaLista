@@ -1,0 +1,8 @@
+# Ambiente Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Dados locais (banco JSON e chave secreta)
+data/

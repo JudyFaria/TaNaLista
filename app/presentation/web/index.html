@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Listas de compras compartilhadas com a família e amigos.">
+  <meta name="theme-color" content="#1f6f4a" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12261c" media="(prefers-color-scheme: dark)">
+  <title>Lista de Compras</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Pular para o conteúdo</a>
+
+  <header class="topbar">
+    <a id="back" class="icon-btn" href="#/" hidden>
+      <span aria-hidden="true">←</span><span class="visually-hidden">Voltar</span>
+    </a>
+    <h1 id="page-title" tabindex="-1">Lista de Compras</h1>
+    <div id="topbar-actions" class="topbar-actions"></div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <p class="muted center">Carregando…</p>
+  </main>
+
+  <div id="toasts" class="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
+
+  <noscript>
+    <p class="center">Esta aplicação precisa de JavaScript ativado.</p>
+  </noscript>
+</body>
+</html>
