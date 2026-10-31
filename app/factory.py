@@ -43,7 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @api.get("/health", include_in_schema=False)
     def health() -> dict[str, str]:
-        return {"status": "ok"}
+        return {"status": "ok", "storage": settings.storage}
 
     for module in (auth, groups, items, events):
         api.include_router(module.router)

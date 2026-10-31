@@ -2,6 +2,7 @@
 
 const TOKEN_KEY = "compras.token";
 const USER_KEY = "compras.user";
+const API_CACHE = "compras-api"; // mesmo nome usado no sw.js
 
 // localStorage pode falhar (modo privado, bloqueio do navegador).
 const storage = {
@@ -23,6 +24,7 @@ export const session = {
   get token() { return memoryToken; },
   get user() { return memoryUser; },
   save({ access_token, user }) {
+    if (memoryUser?.id !== user.id) clearApiCache();
     memoryToken = access_token;
     memoryUser = user;
     storage.set(TOKEN_KEY, access_token);
@@ -33,8 +35,14 @@ export const session = {
     memoryUser = null;
     storage.remove(TOKEN_KEY);
     storage.remove(USER_KEY);
+    clearApiCache();
   },
 };
+
+// As listas salvas para uso offline são de um usuário só: some ao sair da conta.
+function clearApiCache() {
+  try { globalThis.caches?.delete(API_CACHE).catch(() => {}); } catch { /* ignora */ }
+}
 
 export class ApiError extends Error {
   constructor(message, status) {
@@ -46,6 +54,11 @@ export class ApiError extends Error {
 let unauthorizedHandler = () => {};
 export function onUnauthorized(handler) {
   unauthorizedHandler = handler;
+}
+
+let offlineHandler = () => {};
+export function onOfflineData(handler) {
+  offlineHandler = handler;
 }
 
 async function request(method, path, body) {
@@ -64,6 +77,7 @@ async function request(method, path, body) {
     throw new ApiError("Sem conexão. Verifique sua internet e tente de novo.", 0);
   }
 
+  if (response.headers.get("X-From-Cache")) offlineHandler();
   if (response.status === 204) return null;
   const data = await response.json().catch(() => null);
   if (!response.ok) {

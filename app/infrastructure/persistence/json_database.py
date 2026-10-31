@@ -5,8 +5,8 @@
   no meio da escrita não corrompe o arquivo.
 - Um ``RLock`` serializa o acesso entre as threads do servidor.
 
-É adequado para uso pessoal/familiar. Para muitos usuários simultâneos,
-basta implementar os repositórios com SQLAlchemy (mesmas portas).
+Usado no desenvolvimento local; em produção os dados ficam no Firestore
+(mesmas portas, veja ``firestore_repositories``).
 """
 
 from __future__ import annotations

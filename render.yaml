@@ -1,5 +1,6 @@
 # Blueprint do Render: publica o app com HTTPS e um endereço público.
-# O banco fica no Neon (PostgreSQL gratuito); cole a URL dele em DATABASE_URL.
+# Os dados ficam no Firestore (Firebase, gratuito). A chave da conta de serviço
+# vai como Secret File (firebase.json); veja o README.
 services:
   - type: web
     name: lista-de-compras
@@ -13,5 +14,7 @@ services:
         value: 3.12.7
       - key: APP_SECRET_KEY
         generateValue: true
-      - key: DATABASE_URL
-        sync: false
+      # Obrigatória: o disco do Render é apagado a cada reinício/deploy. Sem ela,
+      # o app se recusa a iniciar (em vez de perder listas e itens em silêncio).
+      - key: FIREBASE_CREDENTIALS
+        value: /etc/secrets/firebase.json

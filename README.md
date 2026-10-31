@@ -25,13 +25,24 @@ Listas de compras compartilhadas, pensadas para o celular.
 ## Publicar na internet (acesso de qualquer lugar)
 
 O app roda no **Render**, que é grátis e já vem com HTTPS e um endereço público. Os dados
-ficam no **Neon**, um PostgreSQL grátis. Nenhum dos dois pede cartão.
+ficam no **Firestore** (Firebase), no plano gratuito Spark: 1 GB e dezenas de milhares de
+leituras/gravações por dia, o suficiente para uso familiar. Nenhum dos dois pede cartão.
 
-1. **Banco (Neon):** crie uma conta em <https://neon.tech>, crie um projeto e copie a
-   *connection string* (começa com `postgresql://`).
+1. **Banco (Firebase):**
+   1. Em <https://console.firebase.google.com>, crie um projeto (o Google Analytics é opcional).
+   2. Em **Build → Firestore Database**, clique em **Criar banco de dados**, escolha o local
+      `southamerica-east1 (São Paulo)` e o **modo de produção**. Esse modo bloqueia o acesso
+      direto pelo navegador; só o servidor (com a chave abaixo) lê e grava.
+   3. Em **⚙ Configurações do projeto → Contas de serviço**, clique em
+      **Gerar nova chave privada**. Isso baixa um arquivo `.json`. **Guarde com cuidado e
+      nunca envie para o GitHub**: quem tem essa chave tem acesso total ao banco.
 2. **Servidor (Render):** crie uma conta em <https://render.com> entrando com o GitHub. Clique
    em **New → Blueprint** e escolha este repositório. O Render lê o arquivo `render.yaml`.
-3. Quando o Render pedir `DATABASE_URL`, cole a connection string do Neon e confirme.
+3. No serviço criado, abra **Environment → Secret Files → Add Secret File**, use o nome
+   `firebase.json` e cole o conteúdo do arquivo baixado no passo 1.3. Salve (o Render
+   reinicia o app). A variável `FIREBASE_CREDENTIALS` já aponta para esse arquivo.
+   **Sem a chave o app não inicia**, porque o disco do Render é apagado a cada reinício e as
+   listas sumiriam. Para conferir, abra `/api/health`: deve mostrar `"storage": "firestore"`.
 4. Em poucos minutos o app fica disponível em `https://lista-de-compras-XXXX.onrender.com`.
    Abra esse endereço no celular e use **"Adicionar à tela inicial"** para instalar como app.
 
@@ -74,7 +85,8 @@ Sem HTTPS, o app funciona normalmente no navegador, com os avisos aparecendo den
 
 | Variável             | Padrão             | Descrição                                                        |
 | -------------------- | ------------------ | ---------------------------------------------------------------- |
-| `DATABASE_URL`       | (vazio)            | PostgreSQL/SQLite via SQLAlchemy. Vazio = banco JSON local       |
+| `FIREBASE_CREDENTIALS` | (vazio)          | Chave da conta de serviço do Firebase (caminho do `.json` ou o conteúdo). Usa o Firestore |
+|                      |                    | Vazio = banco JSON local (proibido no Render ou com `APP_REQUIRE_DATABASE=1`) |
 | `APP_DATA_DIR`       | `./data`           | Pasta do banco `db.json`                                         |
 | `APP_SECRET_KEY`     | gerada em `data/`  | Chave que assina os tokens de login. **Defina em produção.**     |
 | `APP_TOKEN_TTL_DAYS` | `30`               | Por quantos dias o login continua válido                         |
@@ -96,7 +108,7 @@ app/
 │   ├── group_service.py
 │   └── item_service.py
 ├── infrastructure/         # Implementações concretas das portas
-│   ├── persistence/        #   Repositórios: JSON local e SQLAlchemy (PostgreSQL)
+│   ├── persistence/        #   Repositórios: Firestore e JSON local
 │   ├── security.py         #   scrypt (senhas) e JWT (tokens)
 │   └── event_broker.py     #   Notificações em tempo real (SSE)
 ├── presentation/
@@ -113,9 +125,9 @@ tests/                      # Testes de domínio, serviços e API
 - **O `Group` é um agregado.** Pedidos de entrada, aprovação, remoção e saída passam por
   métodos dele, que garantem as regras (ex.: só o dono aprova, e o dono não pode sair).
 - **Portas e adaptadores.** Os casos de uso dependem de `Protocol`s, e há dois adaptadores
-  de banco: **JSON local** (padrão no computador) e **SQLAlchemy** (PostgreSQL em produção).
-  O `container.py` escolhe o adaptador pela `DATABASE_URL`. Nada no domínio ou nos casos de
-  uso muda, e os testes rodam os mesmos cenários nos dois bancos.
+  de banco: **Firestore** (produção) e **JSON local** (padrão no computador). O `container.py`
+  escolhe o adaptador por `FIREBASE_CREDENTIALS`. Nada no domínio ou nos casos de uso muda, e
+  os testes rodam os mesmos cenários nos dois bancos (o Firestore com um falso em memória).
 - **Banco JSON.** Mantido em memória, com gravação atômica (arquivo temporário +
   `os.replace`), rollback se uma transação falhar e lock entre threads. É adequado para uso
   familiar ou de poucos usuários.

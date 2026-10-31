@@ -6,3 +6,8 @@ __pycache__/
 
 # Dados locais (banco JSON e chave secreta)
 data/
+
+# Chave da conta de serviço do Firebase (nunca versionar)
+firebase.json
+*firebase-adminsdk*.json
+serviceAccount*.json

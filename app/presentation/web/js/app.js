@@ -1,6 +1,6 @@
 // Ponto de entrada do frontend: rotas, sessão e notificações em tempo real.
 
-import { api, onUnauthorized, session } from "./api.js";
+import { api, onOfflineData, onUnauthorized, session } from "./api.js";
 import { h, toast } from "./dom.js";
 import * as views from "./views.js";
 
@@ -189,6 +189,13 @@ onUnauthorized(() => {
   events.stop();
   toast("Sua sessão expirou. Entre novamente.", "error");
   navigate("#/entrar");
+});
+
+let offlineNoticeAt = 0;
+onOfflineData(() => {
+  if (Date.now() - offlineNoticeAt < 30_000) return;
+  offlineNoticeAt = Date.now();
+  toast("Sem conexão: mostrando a última versão salva das suas listas.");
 });
 
 if ("serviceWorker" in navigator) {

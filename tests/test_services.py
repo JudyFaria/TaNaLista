@@ -17,6 +17,12 @@ def test_login_with_wrong_password_fails(services):
         services.auth.login("judy", "errada123")
 
 
+@pytest.mark.parametrize("username", ["a/b", ".", "..", ""])
+def test_login_with_malformed_username_fails_cleanly(services, username):
+    with pytest.raises(AuthenticationError):
+        services.auth.login(username, "senha-segura")
+
+
 def test_duplicate_username_and_short_password(services):
     services.user("judy")
     with pytest.raises(ConflictError):

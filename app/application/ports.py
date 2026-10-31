@@ -1,7 +1,7 @@
 """Portas (interfaces) que a camada de aplicação precisa.
 
 Os casos de uso dependem destas abstrações, nunca de implementações
-concretas. Trocar JSON por SQLAlchemy, por exemplo, significa apenas criar
+concretas. Trocar o JSON pelo Firestore, por exemplo, significa apenas criar
 novas classes que satisfaçam estes protocolos (inversão de dependência).
 """
 

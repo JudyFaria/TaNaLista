@@ -14,6 +14,7 @@ from app.config import Settings
 from app.factory import create_app
 from app.container import build_repositories
 from app.infrastructure.security import JwtTokenService, ScryptPasswordHasher
+from tests.fake_firestore import FakeFirestore
 
 TEST_SECRET = "test-secret-key-with-at-least-32-bytes"
 
@@ -46,19 +47,21 @@ class Services:
 
 
 def make_settings(tmp_path: Path, backend: str) -> Settings:
-    database_url = f"sqlite:///{(tmp_path / 'app.db').as_posix()}" if backend == "sql" else None
     return Settings(
         data_dir=tmp_path,
         secret_key=TEST_SECRET,
         token_ttl=timedelta(hours=1),
-        database_url=database_url,
+        firebase_credentials="fake" if backend == "firestore" else None,
     )
 
 
-# Os mesmos testes rodam contra o banco JSON e o SQLAlchemy (SQLite):
-# os dois adaptadores precisam se comportar igual.
-@pytest.fixture(params=["json", "sql"])
-def backend(request) -> str:
+# Os mesmos testes rodam contra o banco JSON e o Firestore (falso, em memória):
+# os adaptadores precisam se comportar igual.
+@pytest.fixture(params=["json", "firestore"])
+def backend(request, monkeypatch) -> str:
+    if request.param == "firestore":
+        fake = FakeFirestore()  # um "projeto" por teste, compartilhado entre reinícios
+        monkeypatch.setattr("app.container.create_firestore_client", lambda _credentials: fake)
     return request.param
 
 

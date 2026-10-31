@@ -1,5 +1,4 @@
 fastapi>=0.111,<1
 uvicorn[standard]>=0.29
 PyJWT>=2.8
-SQLAlchemy>=2.0
-psycopg[binary]>=3.2
+firebase-admin>=6.5
