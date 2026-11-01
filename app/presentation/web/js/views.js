@@ -5,6 +5,7 @@ import { api, session } from "./api.js";
 import {
   checkbox, field, formatDate, h, inviteUrl, onSubmit, options, plural, selectField, toast, withBusy,
 } from "./dom.js";
+import { compressImage } from "./image.js";
 import * as shopping from "./shopping.js";
 
 // --------------------------------------------------------------------------- //
@@ -334,6 +335,60 @@ function itemBody(data) {
   };
 }
 
+// --- fotos dos itens ---------------------------------------------------------- //
+// A foto fica atrás do login: é buscada com o token e exibida por um endereço local (blob:).
+const photoCache = new Map(); // id do item -> { version, promise }
+
+function photoUrl(groupId, item) {
+  const version = item.image_updated_at;
+  const cached = photoCache.get(item.id);
+  if (cached?.version === version) return cached.promise;
+  cached?.promise.then((url) => URL.revokeObjectURL(url)).catch(() => {});
+  const promise = api.itemImage(groupId, item.id).then((blob) => URL.createObjectURL(blob));
+  promise.catch(() => {
+    if (photoCache.get(item.id)?.promise === promise) photoCache.delete(item.id);
+  });
+  photoCache.set(item.id, { version, promise });
+  return promise;
+}
+
+/** Miniatura que abre a foto ampliada. Só aparece depois de carregar (sem internet e sem cache, some). */
+function photoThumb(groupId, item) {
+  if (!item.has_image) return null;
+  const img = h("img", { class: "item-thumb", alt: "", width: 40, height: 40 });
+  const button = h(
+    "button",
+    { class: "thumb", type: "button", hidden: true, "aria-label": `Ver foto de ${item.name}` },
+    img,
+  );
+  photoUrl(groupId, item)
+    .then((url) => {
+      img.src = url;
+      button.hidden = false;
+    })
+    .catch(() => {});
+  button.addEventListener("click", () => showPhoto(groupId, item));
+  return button;
+}
+
+async function showPhoto(groupId, item) {
+  let url;
+  try {
+    url = await photoUrl(groupId, item);
+  } catch (error) {
+    toast(error.message, "error");
+    return;
+  }
+  const dialog = h("dialog", { class: "dialog", "aria-label": `Foto de ${item.name}` });
+  dialog.append(
+    h("img", { class: "photo-full", alt: `Foto de ${item.name}`, src: url }),
+    h("button", { class: "btn btn-secondary btn-block", type: "button", onclick: () => dialog.close() }, "Fechar"),
+  );
+  dialog.addEventListener("close", () => dialog.remove());
+  document.body.append(dialog);
+  dialog.showModal();
+}
+
 /** Centavos -> "12,50" (para preencher o campo de preço). */
 function plainMoney(cents) {
   return (cents / 100).toFixed(2).replace(".", ",");
@@ -552,6 +607,7 @@ export async function groupItems(ctx, groupId) {
           h("span", { class: "item-meta" }, meta),
         ),
       ),
+      photoThumb(groupId, item),
       edit,
       remove,
     );
@@ -613,6 +669,59 @@ export async function groupItems(ctx, groupId) {
 
   function editItem(item) {
     const dialog = h("dialog", { class: "dialog", "aria-labelledby": "edit-title" });
+
+    // Foto (opcional): só é enviada ao salvar, depois que os dados do item foram gravados.
+    let newPhoto = null; // foto escolhida agora, já reduzida
+    let previewUrl = null;
+    let dropPhoto = false;
+    const photoField = field({
+      label: "Foto (opcional)", name: "photo", type: "file", accept: "image/*",
+      hint: "Escolha da galeria ou tire uma foto agora.",
+    });
+    const photoInput = photoField.querySelector("input");
+    const photoPreview = h("div", { class: "photo-preview" });
+    const removePhoto = h("button", { class: "btn btn-ghost btn-small", type: "button", hidden: true }, "Remover foto");
+
+    function showPreview() {
+      photoPreview.replaceChildren();
+      removePhoto.hidden = true;
+      const show = (url) => {
+        photoPreview.replaceChildren(h("img", { class: "photo-preview-img", alt: `Foto de ${item.name}`, src: url }));
+        removePhoto.hidden = false;
+      };
+      if (newPhoto) show(previewUrl);
+      else if (item.has_image && !dropPhoto) photoUrl(groupId, item).then(show).catch(() => {});
+    }
+
+    photoInput.addEventListener("change", async () => {
+      const file = photoInput.files[0];
+      if (!file) return;
+      photoInput.disabled = true;
+      try {
+        newPhoto = await compressImage(file);
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        previewUrl = URL.createObjectURL(newPhoto);
+        dropPhoto = false;
+        showPreview();
+      } catch (error) {
+        toast(error.message, "error");
+      } finally {
+        photoInput.value = "";
+        photoInput.disabled = false;
+      }
+    });
+    removePhoto.addEventListener("click", () => {
+      if (newPhoto) {
+        newPhoto = null;
+        URL.revokeObjectURL(previewUrl);
+        previewUrl = null;
+      } else {
+        dropPhoto = true;
+      }
+      showPreview();
+    });
+    showPreview();
+
     const form = onSubmit(
       h(
         "form",
@@ -628,6 +737,9 @@ export async function groupItems(ctx, groupId) {
         ),
         selectField({ label: "Categoria", name: "category", choices: CATEGORIES, value: item.category }),
         field({ label: "Observação (opcional)", name: "note", type: "textarea", value: item.note, maxlength: 140 }),
+        photoField,
+        photoPreview,
+        h("div", { class: "row" }, removePhoto),
         h(
           "div",
           { class: "row" },
@@ -637,13 +749,22 @@ export async function groupItems(ctx, groupId) {
       ),
       async (data) => {
         await api.updateItem(groupId, item.id, itemBody(data));
+        let photoError = null;
+        try {
+          if (newPhoto) await api.putItemImage(groupId, item.id, newPhoto);
+          else if (dropPhoto && item.has_image) await api.deleteItemImage(groupId, item.id);
+        } catch (error) {
+          photoError = error;
+        }
         dialog.close();
-        toast("Item atualizado.");
+        if (photoError) toast(`Item salvo, mas a foto não foi enviada: ${photoError.message}`, "error");
+        else toast("Item atualizado.");
         await refresh();
       },
     );
     dialog.append(form);
     dialog.addEventListener("close", () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       dialog.remove();
       content.querySelector(`[data-focus-key="edit:${CSS.escape(item.id)}"]`)?.focus();
     });
@@ -681,6 +802,32 @@ export async function groupItems(ctx, groupId) {
       withoutPrice > 0 &&
         h("span", { class: "muted small" }, plural(withoutPrice, "item comprado ainda sem preço", "itens comprados ainda sem preço")),
     );
+  }
+
+  /** Câmera direto no mercado: tira a foto, reduz e envia (precisa de internet). */
+  function cameraButton(item) {
+    const input = h("input", { type: "file", accept: "image/*", capture: "environment", hidden: true, tabindex: "-1" });
+    const button = h(
+      "button",
+      {
+        class: "icon-action",
+        type: "button",
+        "aria-label": `${item.has_image ? "Trocar a foto de" : "Tirar foto de"} ${item.name}`,
+      },
+      h("span", { "aria-hidden": "true" }, "📷"),
+    );
+    button.addEventListener("click", () => input.click());
+    input.addEventListener("change", () => {
+      const file = input.files[0];
+      input.value = "";
+      if (!file) return;
+      withBusy(button, async () => {
+        await api.putItemImage(groupId, item.id, await compressImage(file));
+        toast("Foto salva.");
+        await refresh();
+      });
+    });
+    return h("span", {}, button, input);
   }
 
   function marketRow(item) {
@@ -734,6 +881,8 @@ export async function groupItems(ctx, groupId) {
           item.note && h("span", { class: "item-meta" }, item.note),
         ),
       ),
+      photoThumb(groupId, item),
+      cameraButton(item),
       h("span", { class: "price" }, h("span", { "aria-hidden": "true" }, "R$"), price),
     );
   }

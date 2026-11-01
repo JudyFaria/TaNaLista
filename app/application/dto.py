@@ -86,6 +86,8 @@ class ItemView:
     created_at: datetime
     bought_by: UserView | None
     bought_at: datetime | None
+    has_image: bool = False
+    image_updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)

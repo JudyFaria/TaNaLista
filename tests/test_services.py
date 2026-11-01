@@ -127,7 +127,7 @@ def test_data_survives_a_restart(settings, services):
     services.items.add_item(owner, group.id, name="Café")
 
     # Novas instâncias dos repositórios, como se o servidor tivesse reiniciado.
-    _, groups, items = build_repositories(settings)
+    _, groups, items, _ = build_repositories(settings)
     reloaded = groups.get(group.id)
     assert reloaded is not None and reloaded.is_owner(owner) and reloaded.has_pending_request(ana)
     assert reloaded.created_at.tzinfo is not None
@@ -138,3 +138,102 @@ def test_search_treats_wildcards_literally(services):
     owner = services.user("judy")
     services.groups.create_group(owner, name="Casa", description="", is_public=True)
     assert services.groups.search(owner, "%%") == []
+
+
+# --------------------------------------------------------------------------- #
+# Foto do item
+# --------------------------------------------------------------------------- #
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64  # só os primeiros bytes importam para a validação
+
+
+def _list_with_member(services):
+    owner, ana = services.user("judy"), services.user("ana")
+    group = services.groups.create_group(owner, name="Casa", description="", is_public=True)
+    services.groups.request_to_join(ana, group.id)
+    services.groups.approve_request(owner, group.id, ana)
+    return owner, ana, group
+
+
+def test_item_without_image_keeps_working(services):
+    owner, _, group = _list_with_member(services)
+    item = services.items.add_item(owner, group.id, name="Café")
+    assert item.has_image is False and item.image_updated_at is None
+    with pytest.raises(NotFoundError):
+        services.items.get_image(owner, group.id, item.id)
+
+
+def test_set_image_saves_reference_and_other_member_sees_it(services):
+    owner, ana, group = _list_with_member(services)
+    item = services.items.add_item(owner, group.id, name="Café")
+
+    updated = services.items.set_image(owner, group.id, item.id, JPEG)
+    assert updated.has_image is True and updated.image_updated_at is not None
+    assert services.images.get(item.id).data == JPEG  # gravado no banco
+
+    # Outra pessoa da lista vê o item com foto e consegue baixá-la.
+    seen = {i.id: i for i in services.items.list_items(ana, group.id)}[item.id]
+    assert seen.has_image is True
+    image = services.items.get_image(ana, group.id, item.id)
+    assert (image.content_type, image.data) == ("image/jpeg", JPEG)
+    assert services.events.of_type("items_changed")[-1][0] == {ana}
+
+
+def test_image_survives_editing_the_item(services):
+    owner, _, group = _list_with_member(services)
+    item = services.items.add_item(owner, group.id, name="Café")
+    services.items.set_image(owner, group.id, item.id, JPEG)
+    edited = services.items.update_item(owner, group.id, item.id, name="Café torrado")
+    assert edited.has_image is True
+
+
+def test_non_member_cannot_read_or_change_image(services):
+    owner, _, group = _list_with_member(services)
+    stranger = services.user("intruso")
+    item = services.items.add_item(owner, group.id, name="Café")
+    services.items.set_image(owner, group.id, item.id, JPEG)
+    with pytest.raises(NotFoundError):
+        services.items.get_image(stranger, group.id, item.id)
+    with pytest.raises(NotFoundError):
+        services.items.set_image(stranger, group.id, item.id, JPEG)
+    with pytest.raises(NotFoundError):
+        services.items.remove_image(stranger, group.id, item.id)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [b"", b"nao e imagem", JPEG + b"\x00" * 400_000],
+    ids=["vazia", "nao-e-imagem", "grande-demais"],
+)
+def test_invalid_image_is_rejected(services, data):
+    owner, _, group = _list_with_member(services)
+    item = services.items.add_item(owner, group.id, name="Café")
+    with pytest.raises(ValidationError):
+        services.items.set_image(owner, group.id, item.id, data)
+    assert services.items.list_items(owner, group.id)[0].has_image is False
+
+
+def test_remove_image_and_cleanup_on_delete(services):
+    owner, _, group = _list_with_member(services)
+    first = services.items.add_item(owner, group.id, name="Café")
+    second = services.items.add_item(owner, group.id, name="Leite")
+    third = services.items.add_item(owner, group.id, name="Pão")
+    for item in (first, second, third):
+        services.items.set_image(owner, group.id, item.id, JPEG)
+
+    assert services.items.remove_image(owner, group.id, first.id).has_image is False
+    assert services.images.get(first.id) is None
+
+    services.items.delete_item(owner, group.id, second.id)
+    assert services.images.get(second.id) is None
+
+    services.items.set_bought(owner, group.id, third.id, True)
+    services.items.clear_bought(owner, group.id)
+    assert services.images.get(third.id) is None
+
+
+def test_delete_group_removes_images(services):
+    owner, _, group = _list_with_member(services)
+    item = services.items.add_item(owner, group.id, name="Café")
+    services.items.set_image(owner, group.id, item.id, JPEG)
+    services.groups.delete_group(owner, group.id)
+    assert services.images.get(item.id) is None

@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 from app.application.dto import ItemView, Notification, UserView
-from app.application.ports import EventPublisher, GroupRepository, ItemRepository, UserRepository
-from app.domain.entities import Group, ShoppingItem
+from app.application.ports import (
+    EventPublisher,
+    GroupRepository,
+    ItemImageRepository,
+    ItemRepository,
+    UserRepository,
+)
+from app.domain.entities import Group, ItemImage, ShoppingItem
 from app.domain.errors import ConflictError, NotFoundError
 
 
@@ -15,11 +21,13 @@ class ItemService:
         items: ItemRepository,
         users: UserRepository,
         events: EventPublisher,
+        images: ItemImageRepository,
     ) -> None:
         self._groups = groups
         self._items = items
         self._users = users
         self._events = events
+        self._images = images
 
     def list_items(self, actor_id: str, group_id: str) -> list[ItemView]:
         self._member_group(actor_id, group_id)
@@ -79,9 +87,41 @@ class ItemService:
         )
         return self._views([item])[0]
 
+    def set_image(self, actor_id: str, group_id: str, item_id: str, data: bytes) -> ItemView:
+        """Anexa (ou troca) a foto do item. ``data`` é a imagem já reduzida pelo celular."""
+        group = self._member_group(actor_id, group_id)
+        item = self._get_item(group_id, item_id)
+        image = ItemImage.create(item_id=item.id, group_id=group_id, data=data)
+        self._images.save(image)
+        item.attach_image(image)
+        self._items.save(item)
+        self._notify_changed(group, actor_id)
+        return self._views([item])[0]
+
+    def get_image(self, actor_id: str, group_id: str, item_id: str) -> ItemImage:
+        self._member_group(actor_id, group_id)
+        item = self._get_item(group_id, item_id)
+        image = self._images.get(item.id) if item.has_image else None
+        if image is None:
+            raise NotFoundError("Este item não tem foto.")
+        return image
+
+    def remove_image(self, actor_id: str, group_id: str, item_id: str) -> ItemView:
+        group = self._member_group(actor_id, group_id)
+        item = self._get_item(group_id, item_id)
+        if item.has_image:
+            item.detach_image()
+            self._items.save(item)
+            self._images.delete(item.id)
+            self._notify_changed(group, actor_id)
+        return self._views([item])[0]
+
     def delete_item(self, actor_id: str, group_id: str, item_id: str) -> None:
         group = self._member_group(actor_id, group_id)
-        self._items.delete(self._get_item(group_id, item_id).id)
+        item = self._get_item(group_id, item_id)
+        self._items.delete(item.id)
+        if item.has_image:
+            self._images.delete(item.id)
         self._notify_others(
             group,
             actor_id,
@@ -93,6 +133,8 @@ class ItemService:
         bought = [i for i in self._items.list_by_group(group_id) if i.is_bought]
         for item in bought:
             self._items.delete(item.id)
+            if item.has_image:
+                self._images.delete(item.id)
         if bought:
             self._notify_others(
                 group,
@@ -122,6 +164,13 @@ class ItemService:
             raise NotFoundError("Item não encontrado.")
         return item
 
+    def _notify_changed(self, group: Group, actor_id: str) -> None:
+        self._notify_others(
+            group,
+            actor_id,
+            Notification(type="items_changed", title=group.name, body="", group_id=group.id),
+        )
+
     def _notify_others(self, group: Group, actor_id: str, notification: Notification) -> None:
         self._events.publish([uid for uid in group.members if uid != actor_id], notification)
 
@@ -146,6 +195,8 @@ class ItemService:
                 created_at=i.created_at,
                 bought_by=view(i.bought_by) if i.bought_by else None,
                 bought_at=i.bought_at,
+                has_image=i.has_image,
+                image_updated_at=i.image_updated_at,
             )
             for i in items
         ]

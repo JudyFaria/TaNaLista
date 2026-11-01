@@ -69,3 +69,41 @@ def test_frontend_is_served_with_security_headers(client):
     assert response.status_code == 200
     assert "Lista de Compras" in response.text
     assert "default-src 'self'" in response.headers["content-security-policy"]
+
+
+def test_item_image_flow(client):
+    judy, mae, intruso = register(client, "judy"), register(client, "mae"), register(client, "intruso")
+    gid = client.post("/api/groups", json={"name": "Casa", "is_public": True}, headers=judy).json()["id"]
+    client.post(f"/api/groups/{gid}/join-requests", headers=mae)
+    mae_id = client.get("/api/auth/me", headers=mae).json()["id"]
+    client.post(f"/api/groups/{gid}/join-requests/{mae_id}/approve", headers=judy)
+
+    item = client.post(f"/api/groups/{gid}/items", json={"name": "Café"}, headers=judy).json()
+    assert item["has_image"] is False
+    url = f"/api/groups/{gid}/items/{item['id']}/image"
+    assert client.get(url, headers=judy).status_code == 404  # sem foto
+
+    photo = b"\xff\xd8\xff\xe0" + b"jpeg-bytes" * 10
+    saved = client.put(url, content=photo, headers={**judy, "Content-Type": "image/jpeg"})
+    assert saved.status_code == 200 and saved.json()["has_image"] is True
+
+    # Outro usuário da lista vê o item com foto e baixa a imagem.
+    listed = client.get(f"/api/groups/{gid}/items", headers=mae).json()
+    assert listed[0]["has_image"] is True
+    downloaded = client.get(url, headers=mae)
+    assert downloaded.status_code == 200
+    assert downloaded.headers["content-type"] == "image/jpeg"
+    assert downloaded.content == photo
+
+    # Quem não é da lista não descobre nem a lista, nem a foto.
+    assert client.get(url, headers=intruso).status_code == 404
+    assert client.put(url, content=photo, headers=intruso).status_code == 404
+    assert client.get(url).status_code == 401
+
+    # Conteúdo que não é imagem, ou grande demais, é recusado.
+    assert client.put(url, content=b"texto", headers=judy).status_code == 422
+    assert client.put(url, content=photo + b"\x00" * 500_000, headers=judy).status_code == 422
+
+    removed = client.delete(url, headers=judy)
+    assert removed.status_code == 200 and removed.json()["has_image"] is False
+    assert client.get(url, headers=mae).status_code == 404

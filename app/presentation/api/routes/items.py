@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Request, Response, status
+from starlette.concurrency import run_in_threadpool
 
 from app.application.dto import ItemView
+from app.domain.entities import MAX_IMAGE_BYTES
 from app.presentation.api.dependencies import ContainerDep, CurrentUser
 from app.presentation.api.schemas import ClearedOut, ItemIn, ItemOut, ItemStatusIn
 
@@ -36,6 +38,43 @@ def set_status(
     group_id: str, item_id: str, body: ItemStatusIn, user: CurrentUser, container: ContainerDep
 ) -> ItemView:
     return container.items.set_bought(user.id, group_id, item_id, body.bought)
+
+
+async def _read_image_body(request: Request) -> bytes:
+    """Lê o corpo (a imagem em bytes) parando logo depois do limite, sem encher a memória."""
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        chunks.append(chunk)
+        size += len(chunk)
+        if size > MAX_IMAGE_BYTES:
+            break  # grande demais: o domínio recusa com a mensagem certa
+    return b"".join(chunks)
+
+
+# A foto vai como corpo binário (sem multipart), já reduzida pelo celular.
+@router.put("/{item_id}/image", response_model=ItemOut)
+async def put_image(
+    group_id: str, item_id: str, request: Request, user: CurrentUser, container: ContainerDep
+) -> ItemView:
+    data = await _read_image_body(request)
+    return await run_in_threadpool(container.items.set_image, user.id, group_id, item_id, data)
+
+
+@router.get("/{item_id}/image", response_class=Response)
+def get_image(group_id: str, item_id: str, user: CurrentUser, container: ContainerDep) -> Response:
+    image = container.items.get_image(user.id, group_id, item_id)
+    # A foto só é acessível a membros da lista, então nada de cache compartilhado.
+    return Response(
+        content=image.data,
+        media_type=image.content_type,
+        headers={"Cache-Control": "private, no-cache"},
+    )
+
+
+@router.delete("/{item_id}/image", response_model=ItemOut)
+def delete_image(group_id: str, item_id: str, user: CurrentUser, container: ContainerDep) -> ItemView:
+    return container.items.remove_image(user.id, group_id, item_id)
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

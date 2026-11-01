@@ -1,5 +1,5 @@
 // Service worker: deixa o app instalável, abre rápido e exibe notificações.
-const CACHE = "compras-v3";
+const CACHE = "compras-v4";
 const API_CACHE = "compras-api"; // última versão das listas e itens, para abrir sem internet
 const SHELL = [
   "/",
@@ -12,6 +12,7 @@ const SHELL = [
   "/js/dom.js",
   "/js/views.js",
   "/js/shopping.js",
+  "/js/image.js",
 ];
 
 self.addEventListener("install", (event) => {

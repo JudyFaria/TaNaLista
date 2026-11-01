@@ -29,6 +29,9 @@ MAX_ITEM_NAME = 80
 MAX_ITEM_QUANTITY = 30
 MAX_ITEM_BRAND = 40
 MAX_ITEM_NOTE = 140
+# O celular já envia a foto reduzida (~100–200 KB); o limite protege o servidor e o
+# Firestore (documento de até 1 MiB, e o base64 aumenta o tamanho em ~33%).
+MAX_IMAGE_BYTES = 400_000
 
 
 def utc_now() -> datetime:
@@ -256,6 +259,8 @@ class ShoppingItem:
     created_at: datetime = field(default_factory=utc_now)
     bought_by: str | None = None
     bought_at: datetime | None = None
+    # Quando a foto (opcional) foi enviada; serve também para o app saber que ela mudou.
+    image_updated_at: datetime | None = None
 
     @classmethod
     def create(cls, *, group_id: str, added_by: str, **details) -> ShoppingItem:
@@ -304,3 +309,49 @@ class ShoppingItem:
     def mark_pending(self) -> None:
         self.bought_by = None
         self.bought_at = None
+
+    @property
+    def has_image(self) -> bool:
+        return self.image_updated_at is not None
+
+    def attach_image(self, image: ItemImage) -> None:
+        self.image_updated_at = image.updated_at
+
+    def detach_image(self) -> None:
+        self.image_updated_at = None
+
+
+# --------------------------------------------------------------------------- #
+# Foto do item (opcional)
+# --------------------------------------------------------------------------- #
+def _detect_image_type(data: bytes) -> str | None:
+    """Descobre o formato pelos primeiros bytes; o tipo informado pelo cliente não é confiável."""
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
+
+@dataclass
+class ItemImage:
+    item_id: str
+    group_id: str
+    content_type: str
+    data: bytes
+    updated_at: datetime = field(default_factory=utc_now)
+
+    @classmethod
+    def create(cls, *, item_id: str, group_id: str, data: bytes) -> ItemImage:
+        if not data:
+            raise ValidationError("A imagem está vazia.")
+        if len(data) > MAX_IMAGE_BYTES:
+            raise ValidationError(
+                f"A imagem é grande demais (máximo de {MAX_IMAGE_BYTES // 1000} KB depois de reduzida)."
+            )
+        content_type = _detect_image_type(data)
+        if content_type is None:
+            raise ValidationError("Formato de imagem não suportado. Use JPEG, PNG ou WebP.")
+        return cls(item_id=item_id, group_id=group_id, content_type=content_type, data=data)

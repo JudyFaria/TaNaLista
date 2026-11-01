@@ -34,13 +34,14 @@ class RecordingPublisher:
 
 class Services:
     def __init__(self, settings: Settings) -> None:
-        users, groups, items = build_repositories(settings)
+        users, groups, items, images = build_repositories(settings)
         self.events = RecordingPublisher()
         self.auth = AuthService(
             users, ScryptPasswordHasher(n=2**10), JwtTokenService(TEST_SECRET, timedelta(hours=1))
         )
-        self.groups = GroupService(groups, users, items, self.events)
-        self.items = ItemService(groups, items, users, self.events)
+        self.images = images
+        self.groups = GroupService(groups, users, items, self.events, images)
+        self.items = ItemService(groups, items, users, self.events, images)
 
     def user(self, username: str, name: str | None = None) -> str:
         return self.auth.register(username, name or username.title(), "senha-segura").user.id

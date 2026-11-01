@@ -25,7 +25,7 @@ Collection = dict[str, dict[str, Any]]
 
 
 class JsonDatabase:
-    COLLECTIONS = ("users", "groups", "items")
+    COLLECTIONS = ("users", "groups", "items", "item_imgs")
 
     def __init__(self, path: Path) -> None:
         self._path = path

@@ -5,7 +5,8 @@ Implementam as mesmas portas dos repositórios JSON. Coleções:
 - ``users``: um documento por usuário (id = ``user.id``);
 - ``usernames``: reserva do nome de usuário (id = ``username``), garante unicidade;
 - ``groups``: listas, com ``member_ids`` para buscar as listas de um usuário;
-- ``items``: itens, com ``group_id`` para buscar os itens de uma lista.
+- ``items``: itens, com ``group_id`` para buscar os itens de uma lista;
+- ``item_imgs``: a foto (opcional) de cada item, já reduzida pelo celular.
 
 Os documentos usam o mesmo formato do banco JSON (``mappers``).
 """
@@ -20,7 +21,7 @@ from typing import Any
 from google.api_core.exceptions import AlreadyExists
 from google.cloud.firestore_v1.base_query import FieldFilter
 
-from app.domain.entities import USERNAME_PATTERN, Group, ShoppingItem, User
+from app.domain.entities import USERNAME_PATTERN, Group, ItemImage, ShoppingItem, User
 from app.domain.errors import ConflictError
 from app.infrastructure.persistence import mappers
 
@@ -149,9 +150,40 @@ class FirestoreItemRepository:
         self._items.document(item_id).delete()
 
     def delete_by_group(self, group_id: str) -> None:
-        refs = [s.reference for s in self._items.where(**_where("group_id", "==", group_id)).stream()]
-        for start in range(0, len(refs), BATCH_LIMIT):
-            batch = self._client.batch()
-            for ref in refs[start : start + BATCH_LIMIT]:
-                batch.delete(ref)
-            batch.commit()
+        _delete_where_group(self._client, self._items, group_id)
+
+
+# --------------------------------------------------------------------------- #
+# Fotos dos itens
+# --------------------------------------------------------------------------- #
+class FirestoreItemImageRepository:
+    """Uma foto por item, na coleção ``item_imgs`` (id do documento = id do item).
+
+    Fica separada de ``items`` para que listar os itens não baixe as fotos.
+    """
+
+    def __init__(self, client: Any) -> None:
+        self._client = client
+        self._images = client.collection("item_imgs")
+
+    def save(self, image: ItemImage) -> None:
+        self._images.document(image.item_id).set(mappers.image_to_dict(image))
+
+    def get(self, item_id: str) -> ItemImage | None:
+        snap = self._images.document(item_id).get()
+        return mappers.image_from_dict(snap.to_dict()) if snap.exists else None
+
+    def delete(self, item_id: str) -> None:
+        self._images.document(item_id).delete()
+
+    def delete_by_group(self, group_id: str) -> None:
+        _delete_where_group(self._client, self._images, group_id)
+
+
+def _delete_where_group(client: Any, collection: Any, group_id: str) -> None:
+    refs = [s.reference for s in collection.where(**_where("group_id", "==", group_id)).stream()]
+    for start in range(0, len(refs), BATCH_LIMIT):
+        batch = client.batch()
+        for ref in refs[start : start + BATCH_LIMIT]:
+            batch.delete(ref)
+        batch.commit()

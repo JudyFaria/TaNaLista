@@ -305,6 +305,30 @@ input[aria-invalid="true"] { border-color: var(--danger); }
   cursor: pointer;
 }
 
+/* Foto do item: miniatura na lista e imagem ampliada. */
+.thumb {
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+}
+.thumb[hidden] { display: none; }
+.item-thumb { display: block; width: 40px; height: 40px; margin: auto; object-fit: cover; border-radius: 8px; }
+.photo-preview:empty { display: none; }
+.photo-preview-img, .photo-full {
+  display: block;
+  width: 100%;
+  max-height: 60dvh;
+  object-fit: contain;
+  border-radius: var(--radius);
+  background: var(--border);
+}
+.photo-full { margin-bottom: 12px; }
+
 .category { display: grid; gap: 8px; }
 .category h3 { font-size: 1rem; }
 

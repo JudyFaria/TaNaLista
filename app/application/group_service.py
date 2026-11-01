@@ -10,7 +10,13 @@ from app.application.dto import (
     Notification,
     UserView,
 )
-from app.application.ports import EventPublisher, GroupRepository, ItemRepository, UserRepository
+from app.application.ports import (
+    EventPublisher,
+    GroupRepository,
+    ItemImageRepository,
+    ItemRepository,
+    UserRepository,
+)
 from app.domain.entities import Group
 from app.domain.errors import NotFoundError, ValidationError
 
@@ -25,11 +31,13 @@ class GroupService:
         users: UserRepository,
         items: ItemRepository,
         events: EventPublisher,
+        images: ItemImageRepository,
     ) -> None:
         self._groups = groups
         self._users = users
         self._items = items
         self._events = events
+        self._images = images
 
     # --- consultas ------------------------------------------------------- #
     def list_my_groups(self, actor_id: str) -> list[GroupSummary]:
@@ -78,6 +86,7 @@ class GroupService:
         group = self._get_group(group_id)
         group.ensure_owner(actor_id)
         other_members = [uid for uid in group.members if uid != actor_id]
+        self._images.delete_by_group(group.id)
         self._items.delete_by_group(group.id)
         self._groups.delete(group.id)
         self._events.publish(

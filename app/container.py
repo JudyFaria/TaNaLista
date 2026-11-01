@@ -11,11 +11,17 @@ from dataclasses import dataclass
 from app.application.auth_service import AuthService
 from app.application.group_service import GroupService
 from app.application.item_service import ItemService
-from app.application.ports import GroupRepository, ItemRepository, UserRepository
+from app.application.ports import (
+    GroupRepository,
+    ItemImageRepository,
+    ItemRepository,
+    UserRepository,
+)
 from app.config import Settings
 from app.infrastructure.event_broker import InMemoryEventBroker
 from app.infrastructure.persistence.firestore_repositories import (
     FirestoreGroupRepository,
+    FirestoreItemImageRepository,
     FirestoreItemRepository,
     FirestoreUserRepository,
     create_firestore_client,
@@ -23,6 +29,7 @@ from app.infrastructure.persistence.firestore_repositories import (
 from app.infrastructure.persistence.json_database import JsonDatabase
 from app.infrastructure.persistence.json_repositories import (
     JsonGroupRepository,
+    JsonItemImageRepository,
     JsonItemRepository,
     JsonUserRepository,
 )
@@ -39,27 +46,33 @@ class Container:
 
 def build_repositories(
     settings: Settings,
-) -> tuple[UserRepository, GroupRepository, ItemRepository]:
+) -> tuple[UserRepository, GroupRepository, ItemRepository, ItemImageRepository]:
     if settings.firebase_credentials:
         client = create_firestore_client(settings.firebase_credentials)
         return (
             FirestoreUserRepository(client),
             FirestoreGroupRepository(client),
             FirestoreItemRepository(client),
+            FirestoreItemImageRepository(client),
         )
     db = JsonDatabase(settings.database_path)
-    return JsonUserRepository(db), JsonGroupRepository(db), JsonItemRepository(db)
+    return (
+        JsonUserRepository(db),
+        JsonGroupRepository(db),
+        JsonItemRepository(db),
+        JsonItemImageRepository(db),
+    )
 
 
 def build_container(settings: Settings) -> Container:
-    users, groups, items = build_repositories(settings)
+    users, groups, items, images = build_repositories(settings)
     broker = InMemoryEventBroker()
 
     return Container(
         auth=AuthService(
             users, ScryptPasswordHasher(), JwtTokenService(settings.secret_key, settings.token_ttl)
         ),
-        groups=GroupService(groups, users, items, broker),
-        items=ItemService(groups, items, users, broker),
+        groups=GroupService(groups, users, items, broker, images),
+        items=ItemService(groups, items, users, broker, images),
         broker=broker,
     )

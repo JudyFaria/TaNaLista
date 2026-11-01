@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 from datetime import datetime
 from typing import Any
 
 from app.domain.entities import (
     Category,
     Group,
+    ItemImage,
     JoinRequest,
     Membership,
     Role,
@@ -103,6 +105,7 @@ def item_to_dict(item: ShoppingItem) -> dict[str, Any]:
         "created_at": _dt(item.created_at),
         "bought_by": item.bought_by,
         "bought_at": _dt(item.bought_at),
+        "image_updated_at": _dt(item.image_updated_at),
     }
 
 
@@ -121,4 +124,26 @@ def item_from_dict(data: dict[str, Any]) -> ShoppingItem:
         created_at=_parse_dt(data["created_at"]),
         bought_by=data["bought_by"],
         bought_at=_parse_dt(data["bought_at"]),
+        image_updated_at=_parse_dt(data.get("image_updated_at")),
+    )
+
+
+def image_to_dict(image: ItemImage) -> dict[str, Any]:
+    return {
+        "item_id": image.item_id,
+        "group_id": image.group_id,
+        "content_type": image.content_type,
+        # Base64 mantém o mesmo formato nos dois bancos (JSON e Firestore).
+        "data": base64.b64encode(image.data).decode("ascii"),
+        "updated_at": _dt(image.updated_at),
+    }
+
+
+def image_from_dict(data: dict[str, Any]) -> ItemImage:
+    return ItemImage(
+        item_id=data["item_id"],
+        group_id=data["group_id"],
+        content_type=data["content_type"],
+        data=base64.b64decode(data["data"]),
+        updated_at=_parse_dt(data["updated_at"]),
     )

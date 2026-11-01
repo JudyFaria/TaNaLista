@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from app.domain.entities import Group, ShoppingItem, User
+from app.domain.entities import Group, ItemImage, ShoppingItem, User
 from app.infrastructure.persistence import mappers
 from app.infrastructure.persistence.json_database import JsonDatabase
 
@@ -103,3 +103,26 @@ class JsonItemRepository:
         with self._db.transaction() as data:
             for item_id in [k for k, v in data["items"].items() if v["group_id"] == group_id]:
                 del data["items"][item_id]
+
+
+class JsonItemImageRepository:
+    def __init__(self, db: JsonDatabase) -> None:
+        self._db = db
+
+    def save(self, image: ItemImage) -> None:
+        with self._db.transaction() as data:
+            data["item_imgs"][image.item_id] = mappers.image_to_dict(image)
+
+    def get(self, item_id: str) -> ItemImage | None:
+        with self._db.read() as data:
+            raw = data["item_imgs"].get(item_id)
+            return mappers.image_from_dict(raw) if raw else None
+
+    def delete(self, item_id: str) -> None:
+        with self._db.transaction() as data:
+            data["item_imgs"].pop(item_id, None)
+
+    def delete_by_group(self, group_id: str) -> None:
+        with self._db.transaction() as data:
+            for item_id in [k for k, v in data["item_imgs"].items() if v["group_id"] == group_id]:
+                del data["item_imgs"][item_id]

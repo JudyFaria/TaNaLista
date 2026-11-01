@@ -100,6 +100,8 @@ class ItemOut(BaseModel):
     created_at: datetime
     bought_by: UserOut | None
     bought_at: datetime | None
+    has_image: bool
+    image_updated_at: datetime | None
 
 
 class ClearedOut(BaseModel):

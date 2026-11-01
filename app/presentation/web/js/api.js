@@ -61,9 +61,10 @@ export function onOfflineData(handler) {
   offlineHandler = handler;
 }
 
-async function request(method, path, body) {
-  const headers = { Accept: "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+// ``binary``: o corpo é um Blob enviado como está (foto). ``blob``: a resposta é um arquivo.
+async function request(method, path, body, { binary = false, blob = false } = {}) {
+  const headers = { Accept: blob ? "*/*" : "application/json" };
+  if (body !== undefined) headers["Content-Type"] = binary ? body.type : "application/json";
   if (session.token) headers.Authorization = `Bearer ${session.token}`;
 
   let response;
@@ -71,7 +72,7 @@ async function request(method, path, body) {
     response = await fetch(`/api${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : binary ? body : JSON.stringify(body),
     });
   } catch {
     throw new ApiError("Sem conexão. Verifique sua internet e tente de novo.", 0);
@@ -79,6 +80,7 @@ async function request(method, path, body) {
 
   if (response.headers.get("X-From-Cache")) offlineHandler();
   if (response.status === 204) return null;
+  if (blob && response.ok) return response.blob();
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     if (response.status === 401 && session.token) unauthorizedHandler();
@@ -118,6 +120,10 @@ export const api = {
   setBought: (id, itemId, bought) => request("PATCH", `/groups/${e(id)}/items/${e(itemId)}`, { bought }),
   deleteItem: (id, itemId) => request("DELETE", `/groups/${e(id)}/items/${e(itemId)}`),
   clearBought: (id) => request("DELETE", `/groups/${e(id)}/items/bought`),
+  itemImage: (id, itemId) => request("GET", `/groups/${e(id)}/items/${e(itemId)}/image`, undefined, { blob: true }),
+  putItemImage: (id, itemId, blob) =>
+    request("PUT", `/groups/${e(id)}/items/${e(itemId)}/image`, blob, { binary: true }),
+  deleteItemImage: (id, itemId) => request("DELETE", `/groups/${e(id)}/items/${e(itemId)}/image`),
 };
 
 function parseJson(raw) {
