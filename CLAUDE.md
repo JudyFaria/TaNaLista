@@ -1,10 +1,8 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project
 
-"Lista de Compras": shared shopping lists for mobile. It's a FastAPI backend that serves a no-build PWA frontend (vanilla ES modules). The code comments, docstrings, user-facing strings and README are in Brazilian Portuguese. Keep new text in Portuguese.
+"TáNaLista": shared shopping lists for mobile. It's a FastAPI backend that serves a no-build PWA frontend (vanilla ES modules). The code comments, docstrings, user-facing strings and README are in Brazilian Portuguese. Keep new text in Portuguese.
 
 ## Commands
 
@@ -68,3 +66,10 @@ Environment variables:
 `Settings.from_env()` refuses to start without Firestore when `RENDER` or `APP_REQUIRE_DATABASE` is set, because the disk there is ephemeral.
 
 Deploys run on Render via `render.yaml`, automatically on every push to `main`. The Firebase key goes in as the Secret File `/etc/secrets/firebase.json`. `/api/health` reports which storage backend is active.
+
+## Regras de trabalho
+- Uma tarefa só está pronta quando `pytest` passa (ele já roda os dois backends).
+- Nunca faça commit nem push sem eu pedir. Push na `main` faz deploy em produção.
+- Nunca versione `data/` (db.json, .secret_key) nem credenciais do Firebase. Confirme que estão no .gitignore.
+- Não adicione linter, formatador, build de frontend ou dependências novas sem eu pedir.
+- Se o pedido for ambíguo, pergunte antes de implementar.

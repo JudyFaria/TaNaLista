@@ -1,9 +1,9 @@
-# Lista de Compras online
+# TáNaLista
 
 Listas de compras compartilhadas, pensadas para o celular.
 
-> **A ideia:** o café acabou, eu abro a aplicação, adiciono o café à lista e
-> minha mãe, que participa da mesma lista, recebe um aviso na hora.
+>Quem divide a casa conhece a confusão: um anota a lista no papel, outro manda itens pelo WhatsApp e, na hora de comprar, ninguém sabe o que já foi pego. O resultado é item esquecido, compra repetida e a pergunta de sempre: “quem vai passar no mercado?”. O TáNaLista resolve isso com uma lista de compras compartilhada, que funciona no celular: o café acabou, você adiciona à lista e quem participa dela é avisado na hora. Cada lista tem um dono, que decide quem pode entrar, e os itens aparecem separados por categoria (padaria, hortifrúti, limpeza...), com quantidade e marca. No mercado, mesmo sem sinal, você marca o que já pegou e anota os preços para ver quanto gastou, e tudo é atualizado para o grupo quando a internet volta.
+
 
 ## Funcionalidades
 
