@@ -5,7 +5,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from app.domain.entities import Group, JoinRequest, Membership, Role, ShoppingItem, User
+from app.domain.entities import (
+    Category,
+    Group,
+    JoinRequest,
+    Membership,
+    Role,
+    ShoppingItem,
+    Unit,
+    User,
+)
 
 
 def _dt(value: datetime | None) -> str | None:
@@ -86,6 +95,9 @@ def item_to_dict(item: ShoppingItem) -> dict[str, Any]:
         "group_id": item.group_id,
         "name": item.name,
         "quantity": item.quantity,
+        "unit": item.unit.value,
+        "brand": item.brand,
+        "category": item.category.value,
         "note": item.note,
         "added_by": item.added_by,
         "created_at": _dt(item.created_at),
@@ -100,6 +112,10 @@ def item_from_dict(data: dict[str, Any]) -> ShoppingItem:
         group_id=data["group_id"],
         name=data["name"],
         quantity=data["quantity"],
+        # Itens gravados antes destes campos existirem recebem os valores padrão.
+        unit=Unit(data.get("unit", Unit.UNIDADE)),
+        brand=data.get("brand", ""),
+        category=Category(data.get("category", Category.OUTROS)),
         note=data["note"],
         added_by=data["added_by"],
         created_at=_parse_dt(data["created_at"]),

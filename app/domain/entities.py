@@ -27,6 +27,7 @@ MAX_GROUP_NAME = 60
 MAX_GROUP_DESCRIPTION = 200
 MAX_ITEM_NAME = 80
 MAX_ITEM_QUANTITY = 30
+MAX_ITEM_BRAND = 40
 MAX_ITEM_NOTE = 140
 
 
@@ -215,6 +216,32 @@ class Group:
 # --------------------------------------------------------------------------- #
 # Item da lista de compras
 # --------------------------------------------------------------------------- #
+class Category(StrEnum):
+    """Seções do mercado, na ordem em que a lista é exibida."""
+
+    HORTIFRUTI = "hortifruti"
+    ACOUGUE = "acougue"
+    FRIOS = "frios"
+    PADARIA = "padaria"
+    MANTIMENTOS = "mantimentos"
+    BEBIDAS = "bebidas"
+    CONGELADOS = "congelados"
+    LIMPEZA = "limpeza"
+    HIGIENE = "higiene"
+    OUTROS = "outros"
+
+
+class Unit(StrEnum):
+    UNIDADE = "un"
+    QUILO = "kg"
+    GRAMA = "g"
+    LITRO = "l"
+    MILILITRO = "ml"
+    PACOTE = "pct"
+    CAIXA = "cx"
+    DUZIA = "dz"
+
+
 @dataclass
 class ShoppingItem:
     group_id: str
@@ -222,24 +249,46 @@ class ShoppingItem:
     added_by: str
     quantity: str = ""
     note: str = ""
+    brand: str = ""
+    unit: Unit = Unit.UNIDADE
+    category: Category = Category.OUTROS
     id: str = field(default_factory=new_id)
     created_at: datetime = field(default_factory=utc_now)
     bought_by: str | None = None
     bought_at: datetime | None = None
 
     @classmethod
-    def create(
-        cls, *, group_id: str, name: str, added_by: str, quantity: str = "", note: str = ""
-    ) -> ShoppingItem:
-        return cls(
-            group_id=group_id,
-            name=_clean_text(name, field_name="Item", max_length=MAX_ITEM_NAME, required=True),
-            quantity=_clean_text(
+    def create(cls, *, group_id: str, added_by: str, **details) -> ShoppingItem:
+        return cls(group_id=group_id, added_by=added_by, **cls._clean_details(**details))
+
+    def update_details(self, **details) -> None:
+        for key, value in self._clean_details(**details).items():
+            setattr(self, key, value)
+
+    @staticmethod
+    def _clean_details(
+        *,
+        name: str,
+        quantity: str = "",
+        unit: str = Unit.UNIDADE,
+        brand: str = "",
+        category: str = Category.OUTROS,
+        note: str = "",
+    ) -> dict:
+        try:
+            unit, category = Unit(unit), Category(category)
+        except ValueError as error:
+            raise ValidationError("Medida ou categoria inválida.") from error
+        return {
+            "name": _clean_text(name, field_name="Item", max_length=MAX_ITEM_NAME, required=True),
+            "quantity": _clean_text(
                 quantity, field_name="Quantidade", max_length=MAX_ITEM_QUANTITY, required=False
             ),
-            note=_clean_text(note, field_name="Observação", max_length=MAX_ITEM_NOTE, required=False),
-            added_by=added_by,
-        )
+            "unit": unit,
+            "brand": _clean_text(brand, field_name="Marca", max_length=MAX_ITEM_BRAND, required=False),
+            "category": category,
+            "note": _clean_text(note, field_name="Observação", max_length=MAX_ITEM_NOTE, required=False),
+        }
 
     @property
     def is_bought(self) -> bool:

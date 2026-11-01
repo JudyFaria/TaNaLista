@@ -114,6 +114,7 @@ export const api = {
 
   items: (id) => request("GET", `/groups/${e(id)}/items`),
   addItem: (id, body) => request("POST", `/groups/${e(id)}/items`, body),
+  updateItem: (id, itemId, body) => request("PUT", `/groups/${e(id)}/items/${e(itemId)}`, body),
   setBought: (id, itemId, bought) => request("PATCH", `/groups/${e(id)}/items/${e(itemId)}`, { bought }),
   deleteItem: (id, itemId) => request("DELETE", `/groups/${e(id)}/items/${e(itemId)}`),
   clearBought: (id) => request("DELETE", `/groups/${e(id)}/items/bought`),

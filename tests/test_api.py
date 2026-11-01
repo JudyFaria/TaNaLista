@@ -37,6 +37,15 @@ def test_end_to_end_flow(client):
     assert item["added_by"]["username"] == "mae"
     assert client.post(f"/api/groups/{gid}/items", json={"name": "café"}, headers=judy).status_code == 409
 
+    edited = client.put(
+        f"/api/groups/{gid}/items/{item['id']}",
+        json={"name": "Café", "brand": "Pilão", "quantity": "500", "unit": "g", "category": "mantimentos"},
+        headers=judy,
+    ).json()
+    assert (edited["brand"], edited["unit"], edited["category"]) == ("Pilão", "g", "mantimentos")
+    bad = client.put(f"/api/groups/{gid}/items/{item['id']}", json={"name": "Café", "unit": "tonelada"}, headers=judy)
+    assert bad.status_code == 422
+
     bought = client.patch(f"/api/groups/{gid}/items/{item['id']}", json={"bought": True}, headers=judy)
     assert bought.json()["bought_by"]["username"] == "judy"
 

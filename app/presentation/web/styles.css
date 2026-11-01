@@ -134,7 +134,7 @@ main {
 }
 main:focus { outline: none; }
 .view { display: grid; gap: 20px; }
-.view.has-dock { padding-bottom: 180px; }
+.view.has-dock { padding-bottom: 200px; }
 
 .muted { color: var(--muted); }
 .small { font-size: 0.9rem; }
@@ -216,7 +216,7 @@ label { font-weight: 600; }
 .field { display: grid; gap: 6px; }
 .hint { font-size: 0.9rem; color: var(--muted); font-weight: 400; }
 
-input[type="text"], input[type="search"], input[type="password"], input[type="url"], textarea {
+input[type="text"], input[type="search"], input[type="password"], input[type="url"], textarea, select {
   width: 100%;
   min-height: var(--tap);
   padding: 10px 14px;
@@ -227,6 +227,7 @@ input[type="text"], input[type="search"], input[type="password"], input[type="ur
   border-radius: 12px;
 }
 textarea { min-height: 88px; resize: vertical; }
+select { padding-right: 8px; }
 input[aria-invalid="true"] { border-color: var(--danger); }
 
 .check {
@@ -290,9 +291,10 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 }
 .item .check { flex: 1; min-width: 0; cursor: pointer; }
 .item-name { font-weight: 600; overflow-wrap: anywhere; }
+.item-details { display: block; font-size: 0.95rem; }
 .item-meta { display: block; font-size: 0.85rem; color: var(--muted); }
 .item.bought .item-name { text-decoration: line-through; color: var(--muted); }
-.item .remove {
+.item .icon-action {
   min-width: var(--tap);
   min-height: var(--tap);
   border: 0;
@@ -302,6 +304,30 @@ input[aria-invalid="true"] { border-color: var(--danger); }
   background: transparent;
   cursor: pointer;
 }
+
+.category { display: grid; gap: 8px; }
+.category h3 { font-size: 1rem; }
+
+/* Modo "No mercado": preço ao lado de cada item. */
+.item.market { padding-right: 8px; }
+.price { display: flex; align-items: center; gap: 4px; flex: none; color: var(--muted); }
+.price .price-input { width: 96px; padding: 10px; text-align: right; }
+
+.total-bar { max-width: 640px; margin: 0 auto; display: grid; gap: 2px; }
+.total-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.total { font-size: 1.5rem; }
+
+/* Janela de edição de item. */
+.dialog {
+  width: min(560px, calc(100% - 2 * var(--gutter)));
+  max-height: calc(100dvh - 2 * var(--gutter));
+  padding: var(--gutter);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.dialog::backdrop { background: rgb(0 0 0 / 0.45); }
 
 details > summary {
   min-height: var(--tap);
@@ -324,7 +350,8 @@ details > summary {
 }
 .dock form { max-width: 640px; margin: 0 auto; gap: 8px; }
 .dock .row { flex-wrap: nowrap; }
-.dock .qty { width: 30%; max-width: 140px; }
+.dock .qty { width: 72px; flex: none; }
+.dock .unit { width: 96px; flex: none; }
 
 /* --- Avisos (toasts) ----------------------------------------------------- */
 .toasts {

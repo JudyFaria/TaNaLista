@@ -2,6 +2,7 @@
 
 import { api, onOfflineData, onUnauthorized, session } from "./api.js";
 import { h, toast } from "./dom.js";
+import * as shopping from "./shopping.js";
 import * as views from "./views.js";
 
 const APP_NAME = "Lista de Compras";
@@ -34,6 +35,7 @@ function navigate(hash) {
 function login(result) {
   session.save(result);
   events.start();
+  syncShopping();
   navigate(takePendingRoute() || "#/");
 }
 
@@ -202,6 +204,18 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
 
+// Marcações feitas no mercado sem internet são enviadas quando a conexão volta.
+async function syncShopping() {
+  if (!session.token) return;
+  const synced = await shopping.syncAll().catch(() => []);
+  const groupId = controller?.groupId;
+  if (synced.length && controller?.refresh && (!groupId || synced.includes(groupId))) {
+    controller.refresh().catch(() => {});
+  }
+}
+
 window.addEventListener("hashchange", render);
+window.addEventListener("online", syncShopping);
 events.start();
 render();
+syncShopping();

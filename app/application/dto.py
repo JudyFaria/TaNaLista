@@ -78,6 +78,9 @@ class ItemView:
     id: str
     name: str
     quantity: str
+    unit: str
+    brand: str
+    category: str
     note: str
     added_by: UserView
     created_at: datetime

@@ -16,14 +16,19 @@ def list_items(group_id: str, user: CurrentUser, container: ContainerDep) -> lis
 
 @router.post("", response_model=ItemOut, status_code=status.HTTP_201_CREATED)
 def add_item(group_id: str, body: ItemIn, user: CurrentUser, container: ContainerDep) -> ItemView:
-    return container.items.add_item(
-        user.id, group_id, name=body.name, quantity=body.quantity, note=body.note
-    )
+    return container.items.add_item(user.id, group_id, **body.model_dump())
 
 
 @router.delete("/bought", response_model=ClearedOut)
 def clear_bought(group_id: str, user: CurrentUser, container: ContainerDep) -> ClearedOut:
     return ClearedOut(removed=container.items.clear_bought(user.id, group_id))
+
+
+@router.put("/{item_id}", response_model=ItemOut)
+def update_item(
+    group_id: str, item_id: str, body: ItemIn, user: CurrentUser, container: ContainerDep
+) -> ItemView:
+    return container.items.update_item(user.id, group_id, item_id, **body.model_dump())
 
 
 @router.patch("/{item_id}", response_model=ItemOut)

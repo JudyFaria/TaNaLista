@@ -2,7 +2,10 @@
 // controlador { groupId, refresh, accepts } para receber atualizações ao vivo.
 
 import { api, session } from "./api.js";
-import { checkbox, field, formatDate, h, inviteUrl, onSubmit, plural, toast, withBusy } from "./dom.js";
+import {
+  checkbox, field, formatDate, h, inviteUrl, onSubmit, options, plural, selectField, toast, withBusy,
+} from "./dom.js";
+import * as shopping from "./shopping.js";
 
 // --------------------------------------------------------------------------- //
 // Entrar / criar conta
@@ -279,50 +282,88 @@ export async function invite(ctx, code) {
 }
 
 // --------------------------------------------------------------------------- //
-// Itens da lista
+// Itens da lista: modo "Lista" (montar) e "No mercado" (comprar, funciona offline)
 // --------------------------------------------------------------------------- //
+const CATEGORIES = [
+  ["hortifruti", "Hortifrúti"],
+  ["acougue", "Açougue e peixaria"],
+  ["frios", "Frios e laticínios"],
+  ["padaria", "Padaria"],
+  ["mantimentos", "Mantimentos"],
+  ["bebidas", "Bebidas"],
+  ["congelados", "Congelados"],
+  ["limpeza", "Limpeza"],
+  ["higiene", "Higiene"],
+  ["outros", "Outros"],
+];
+const UNITS = [
+  ["un", "un"],
+  ["kg", "kg"],
+  ["g", "g"],
+  ["l", "L"],
+  ["ml", "ml"],
+  ["pct", "pacote"],
+  ["cx", "caixa"],
+  ["dz", "dúzia"],
+];
+const UNIT_LABEL = Object.fromEntries(UNITS);
+const MODE_KEY = "compras.modo.";
+
+function readMode(groupId) {
+  try { return localStorage.getItem(MODE_KEY + groupId) === "mercado" ? "mercado" : "lista"; } catch { return "lista"; }
+}
+
+function saveMode(groupId, mode) {
+  try { localStorage.setItem(MODE_KEY + groupId, mode); } catch { /* sem persistência */ }
+}
+
+/** "2 kg · Omo" */
+function itemDetails(item) {
+  const amount = item.quantity ? `${item.quantity} ${UNIT_LABEL[item.unit] ?? item.unit}` : "";
+  return [amount, item.brand].filter(Boolean).join(" · ");
+}
+
+function itemBody(data) {
+  return {
+    name: data.name,
+    brand: data.brand ?? "",
+    quantity: data.quantity ?? "",
+    unit: data.unit || "un",
+    category: data.category || "outros",
+    note: data.note ?? "",
+  };
+}
+
+/** Centavos -> "12,50" (para preencher o campo de preço). */
+function plainMoney(cents) {
+  return (cents / 100).toFixed(2).replace(".", ",");
+}
+
 export async function groupItems(ctx, groupId) {
   const group = await api.group(groupId);
   ctx.setTitle(group.name, "#/");
   ctx.setActions(h("a", { class: "btn btn-ghost btn-small", href: `#/lista/${groupId}/pessoas` }, "Pessoas"));
 
-  const requestsNotice = h("div");
-  const pendingSection = h("section", { "aria-labelledby": "pending-title" });
-  const boughtSection = h("section");
+  let items = [];
+  let mode = readMode(groupId);
+  let renderDeferred = false;
 
-  const nameInput = h("input", {
-    id: "new-item", name: "name", type: "text", required: true, maxlength: 80,
-    autocomplete: "off", enterkeyhint: "send", placeholder: "Ex.: café",
-  });
-  const addForm = onSubmit(
-    h(
-      "form",
-      { "aria-label": "Adicionar item" },
-      h(
-        "div",
-        { class: "row" },
-        h("label", { class: "visually-hidden", for: "new-item" }, "Item para adicionar"),
-        h("div", { class: "grow" }, nameInput),
-        h("label", { class: "visually-hidden", for: "new-qty" }, "Quantidade (opcional)"),
-        h("input", { id: "new-qty", name: "quantity", type: "text", class: "qty", maxlength: 30, autocomplete: "off", placeholder: "Qtd." }),
-        h("button", { class: "btn", type: "submit" }, "Adicionar"),
-      ),
-    ),
-    async (data) => {
-      const item = await api.addItem(groupId, { name: data.name, quantity: data.quantity });
-      addForm.reset();
-      nameInput.focus();
-      toast(`${item.name} adicionado.`);
-      await refresh();
-    },
-  );
+  const tabList = h("button", { type: "button", onclick: () => setMode("lista") }, "Lista");
+  const tabMarket = h("button", { type: "button", onclick: () => setMode("mercado") }, "No mercado");
+  const requestsNotice = h("div");
+  const syncNotice = h("p", { class: "notice", role: "status", hidden: true });
+  const content = h("div");
+  const totalBar = h("div", { class: "total-bar", role: "status", "aria-live": "polite" });
+  const addForm = buildAddForm();
+  const dock = h("div", { class: "dock" });
 
   ctx.root.classList.add("has-dock");
   ctx.root.replaceChildren(
+    h("div", { class: "tabs", role: "group", "aria-label": "Modo da lista" }, tabList, tabMarket),
     requestsNotice,
-    pendingSection,
-    boughtSection,
-    h("div", { class: "dock" }, addForm),
+    syncNotice,
+    content,
+    dock,
   );
 
   if (group.join_requests.length) {
@@ -336,95 +377,163 @@ export async function groupItems(ctx, groupId) {
     );
   }
 
-  async function refresh() {
-    const items = await api.items(groupId);
-    const pending = items.filter((i) => !i.bought_at);
-    const bought = items.filter((i) => i.bought_at);
-    const focusedId = document.activeElement?.dataset?.itemId;
+  function setMode(next) {
+    mode = next;
+    saveMode(groupId, mode);
+    render();
+  }
 
-    pendingSection.replaceChildren(
+  /** Itens do servidor com as marcações deste aparelho que ainda não foram enviadas. */
+  const current = () => shopping.applyPending(groupId, items);
+
+  async function refresh() {
+    const fresh = await api.items(groupId);
+    shopping.prune(groupId, fresh);
+    items = fresh;
+    render();
+  }
+
+  function render() {
+    // Redesenhar no meio da digitação de um preço apagaria o que foi digitado.
+    if (document.activeElement?.classList.contains("price-input")) {
+      renderDeferred = true;
+      if (mode === "mercado") updateTotal(current());
+      return;
+    }
+    renderDeferred = false;
+    const focusKey = document.activeElement?.dataset?.focusKey;
+
+    for (const [tab, name] of [[tabList, "lista"], [tabMarket, "mercado"]]) {
+      tab.setAttribute("aria-pressed", String(mode === name));
+      tab.setAttribute("aria-selected", String(mode === name));
+    }
+    const waiting = shopping.pendingCount(groupId);
+    syncNotice.hidden = waiting === 0;
+    syncNotice.textContent = waiting
+      ? `${plural(waiting, "marcação aguardando", "marcações aguardando")} internet para sincronizar com a lista.`
+      : "";
+
+    if (mode === "mercado") renderMarket(current());
+    else renderList(current());
+
+    // Mantém o foco no mesmo controle após atualizar (teclado e leitores de tela).
+    if (focusKey) content.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus();
+  }
+
+  function renderLater() {
+    setTimeout(() => {
+      if (renderDeferred) render();
+    }, 0);
+  }
+
+  // --- marcar como comprado: vale na hora e é enviado quando houver conexão --- //
+  function toggle(item, bought) {
+    shopping.markBought(groupId, item.id, bought);
+    render();
+    shopping
+      .sync(groupId)
+      .then((sent) => (sent ? refresh() : render()))
+      .catch(() => render());
+  }
+
+  function categorySections(list, rowFn) {
+    return CATEGORIES.map(([value, label]) => {
+      const inCategory = list.filter((i) => i.category === value);
+      if (!inCategory.length) return null;
+      const titleId = `cat-${value}`;
+      return h(
+        "section",
+        { class: "category", "aria-labelledby": titleId },
+        h("h3", { id: titleId }, label, " ", h("span", { class: "muted small" }, `(${inCategory.length})`)),
+        h("ul", { class: "items" }, inCategory.map(rowFn)),
+      );
+    });
+  }
+
+  function checkboxFor(item) {
+    const box = h("input", {
+      type: "checkbox",
+      checked: Boolean(item.bought_at),
+      "data-focus-key": `check:${item.id}`,
+    });
+    box.addEventListener("change", () => toggle(item, box.checked));
+    return box;
+  }
+
+  // --- modo Lista ------------------------------------------------------------ //
+  function renderList(view) {
+    const pending = view.filter((i) => !i.bought_at);
+    const bought = view.filter((i) => i.bought_at);
+
+    content.replaceChildren(h(
+      "div",
+      { class: "stack" },
       h(
         "div",
         { class: "section-title" },
-        h("h2", { id: "pending-title" }, "Para comprar"),
+        h("h2", {}, "Para comprar"),
         h("span", { class: "muted small" }, plural(pending.length, "item", "itens")),
       ),
       pending.length
-        ? h("ul", { class: "items" }, pending.map(itemRow))
+        ? categorySections(pending, listRow)
         : h("p", { class: "empty" }, "Nada faltando por aqui. Use o campo abaixo para adicionar."),
-    );
-
-    if (bought.length) {
-      const clear = h(
-        "button",
-        {
-          class: "btn btn-ghost btn-small",
-          type: "button",
-          onclick: () => {
-            if (!confirm("Remover todos os itens comprados da lista?")) return;
-            withBusy(clear, async () => {
-              await api.clearBought(groupId);
-              toast("Itens comprados removidos.");
-              await refresh();
-            });
-          },
-        },
-        "Limpar comprados",
-      );
-      boughtSection.replaceChildren(
-        h(
-          "details",
-          {},
-          h("summary", {}, `Comprados (${bought.length})`),
-          h("ul", { class: "items" }, bought.map(itemRow)),
-          h("div", { class: "row" }, clear),
-        ),
-      );
-    } else {
-      boughtSection.replaceChildren();
-    }
-
-    // Mantém o foco no mesmo item após atualizar (teclado e leitores de tela).
-    if (focusedId) document.querySelector(`[data-item-id="${CSS.escape(focusedId)}"]`)?.focus();
+      bought.length > 0 && boughtSection(bought),
+    ));
+    dock.replaceChildren(addForm);
   }
 
-  function itemRow(item) {
+  function boughtSection(bought) {
+    const clear = h(
+      "button",
+      {
+        class: "btn btn-ghost btn-small",
+        type: "button",
+        onclick: () => {
+          if (!confirm("Remover todos os itens comprados da lista?")) return;
+          withBusy(clear, async () => {
+            await shopping.sync(groupId);
+            await api.clearBought(groupId);
+            toast("Itens comprados removidos.");
+            await refresh();
+          });
+        },
+      },
+      "Limpar comprados",
+    );
+    return h(
+      "details",
+      {},
+      h("summary", {}, `Comprados (${bought.length})`),
+      h("ul", { class: "items" }, bought.map(listRow)),
+      h("div", { class: "row" }, clear),
+    );
+  }
+
+  function listRow(item) {
     const isBought = Boolean(item.bought_at);
+    const details = itemDetails(item);
     const meta = isBought
       ? `Comprado por ${item.bought_by?.display_name ?? "alguém"}`
       : `Adicionado por ${item.added_by.display_name} · ${formatDate(item.created_at)}`;
 
-    const box = h("input", {
-      type: "checkbox",
-      checked: isBought,
-      "data-item-id": item.id,
-      onchange: async () => {
-        box.disabled = true;
-        try {
-          await api.setBought(groupId, item.id, box.checked);
-          await refresh();
-        } catch (error) {
-          box.checked = !box.checked;
-          box.disabled = false;
-          toast(error.message, "error");
-        }
-      },
-    });
+    const edit = h(
+      "button",
+      { class: "icon-action", type: "button", "aria-label": `Editar ${item.name}`, "data-focus-key": `edit:${item.id}` },
+      h("span", { "aria-hidden": "true" }, "✎"),
+    );
+    edit.addEventListener("click", () => editItem(item));
 
     const remove = h(
       "button",
-      {
-        class: "remove",
-        type: "button",
-        "aria-label": `Remover ${item.name}`,
-        onclick: () =>
-          withBusy(remove, async () => {
-            await api.deleteItem(groupId, item.id);
-            toast(`${item.name} removido.`);
-            await refresh();
-          }),
-      },
+      { class: "icon-action", type: "button", "aria-label": `Remover ${item.name}` },
       h("span", { "aria-hidden": "true" }, "✕"),
+    );
+    remove.addEventListener("click", () =>
+      withBusy(remove, async () => {
+        await api.deleteItem(groupId, item.id);
+        toast(`${item.name} removido.`);
+        await refresh();
+      }),
     );
 
     return h(
@@ -433,20 +542,204 @@ export async function groupItems(ctx, groupId) {
       h(
         "label",
         { class: "check" },
-        box,
+        checkboxFor(item),
         h(
           "span",
           {},
-          h("span", { class: "item-name" }, item.name, item.quantity && ` — ${item.quantity}`),
+          h("span", { class: "item-name" }, item.name),
+          details && h("span", { class: "item-details" }, details),
           item.note && h("span", { class: "item-meta" }, item.note),
           h("span", { class: "item-meta" }, meta),
         ),
       ),
+      edit,
       remove,
     );
   }
 
+  function buildAddForm() {
+    const vh = (forId, text) => h("label", { class: "visually-hidden", for: forId }, text);
+    const nameInput = h("input", {
+      id: "new-item", name: "name", type: "text", required: true, maxlength: 80,
+      autocomplete: "off", enterkeyhint: "send", placeholder: "Ex.: café",
+    });
+    const category = h("select", { id: "new-category", name: "category" }, options(CATEGORIES, "outros"));
+
+    const form = onSubmit(
+      h(
+        "form",
+        { "aria-label": "Adicionar item" },
+        h(
+          "div",
+          { class: "row" },
+          vh("new-item", "Item para adicionar"),
+          h("div", { class: "grow" }, nameInput),
+          vh("new-qty", "Quantidade (opcional)"),
+          h("input", {
+            id: "new-qty", name: "quantity", type: "text", class: "qty", inputmode: "decimal",
+            maxlength: 30, autocomplete: "off", placeholder: "Qtd.",
+          }),
+          vh("new-unit", "Medida"),
+          h("select", { id: "new-unit", name: "unit", class: "unit" }, options(UNITS, "un")),
+        ),
+        h(
+          "div",
+          { class: "row" },
+          vh("new-category", "Categoria"),
+          h("div", { class: "grow" }, category),
+          vh("new-brand", "Marca (opcional)"),
+          h(
+            "div",
+            { class: "grow" },
+            h("input", {
+              id: "new-brand", name: "brand", type: "text", maxlength: 40,
+              autocomplete: "off", placeholder: "Marca",
+            }),
+          ),
+          h("button", { class: "btn", type: "submit" }, "Adicionar"),
+        ),
+      ),
+      async (data) => {
+        const item = await api.addItem(groupId, itemBody(data));
+        form.reset();
+        category.value = data.category; // quem adiciona vários itens da mesma seção não precisa trocar
+        nameInput.focus();
+        toast(`${item.name} adicionado.`);
+        await refresh();
+      },
+    );
+    return form;
+  }
+
+  function editItem(item) {
+    const dialog = h("dialog", { class: "dialog", "aria-labelledby": "edit-title" });
+    const form = onSubmit(
+      h(
+        "form",
+        { novalidate: true },
+        h("h2", { id: "edit-title" }, "Editar item"),
+        field({ label: "Item", name: "name", value: item.name, maxlength: 80, required: true, autocomplete: "off" }),
+        field({ label: "Marca (opcional)", name: "brand", value: item.brand, maxlength: 40, autocomplete: "off" }),
+        h(
+          "div",
+          { class: "row" },
+          h("div", { class: "grow" }, field({ label: "Quantidade", name: "quantity", value: item.quantity, maxlength: 30, inputmode: "decimal", autocomplete: "off" })),
+          h("div", { class: "grow" }, selectField({ label: "Medida", name: "unit", choices: UNITS, value: item.unit })),
+        ),
+        selectField({ label: "Categoria", name: "category", choices: CATEGORIES, value: item.category }),
+        field({ label: "Observação (opcional)", name: "note", type: "textarea", value: item.note, maxlength: 140 }),
+        h(
+          "div",
+          { class: "row" },
+          h("button", { class: "btn btn-ghost", type: "button", onclick: () => dialog.close() }, "Cancelar"),
+          h("button", { class: "btn grow", type: "submit" }, "Salvar"),
+        ),
+      ),
+      async (data) => {
+        await api.updateItem(groupId, item.id, itemBody(data));
+        dialog.close();
+        toast("Item atualizado.");
+        await refresh();
+      },
+    );
+    dialog.append(form);
+    dialog.addEventListener("close", () => {
+      dialog.remove();
+      content.querySelector(`[data-focus-key="edit:${CSS.escape(item.id)}"]`)?.focus();
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+  }
+
+  // --- modo No mercado (preços ficam no aparelho; funciona sem internet) ------ //
+  function renderMarket(view) {
+    // Em cada seção, o que falta pegar vem primeiro.
+    const sorted = [...view].sort((a, b) => Boolean(a.bought_at) - Boolean(b.bought_at));
+    content.replaceChildren(h(
+      "div",
+      { class: "stack" },
+      h("p", { class: "muted small" }, "Marque o que pegou e anote o preço. Funciona sem internet; os preços ficam só neste aparelho."),
+      view.length
+        ? categorySections(sorted, marketRow)
+        : h("p", { class: "empty" }, "A lista está vazia. Volte para “Lista” para adicionar itens."),
+    ));
+    updateTotal(view);
+    dock.replaceChildren(totalBar);
+  }
+
+  function updateTotal(view) {
+    const saved = shopping.prices(groupId);
+    const bought = view.filter((i) => i.bought_at);
+    const withoutPrice = bought.filter((i) => saved[i.id] == null).length;
+    totalBar.replaceChildren(
+      h(
+        "div",
+        { class: "total-line" },
+        h("span", {}, `${bought.length} de ${plural(view.length, "item", "itens")} no carrinho`),
+        h("strong", { class: "total" }, shopping.formatMoney(shopping.total(groupId, view))),
+      ),
+      withoutPrice > 0 &&
+        h("span", { class: "muted small" }, plural(withoutPrice, "item comprado ainda sem preço", "itens comprados ainda sem preço")),
+    );
+  }
+
+  function marketRow(item) {
+    const isBought = Boolean(item.bought_at);
+    const saved = shopping.prices(groupId)[item.id];
+    const details = itemDetails(item);
+
+    const price = h("input", {
+      type: "text",
+      class: "price-input",
+      inputmode: "decimal",
+      autocomplete: "off",
+      enterkeyhint: "done",
+      placeholder: "0,00",
+      value: saved != null ? plainMoney(saved) : null,
+      "aria-label": `Preço pago por ${item.name}`,
+      "data-focus-key": `price:${item.id}`,
+    });
+    price.addEventListener("change", () => {
+      const raw = price.value.trim();
+      const cents = shopping.parseMoney(raw);
+      if (raw && cents == null) {
+        price.setAttribute("aria-invalid", "true");
+        toast("Valor inválido. Use, por exemplo, 12,50.", "error");
+        return;
+      }
+      price.removeAttribute("aria-invalid");
+      if (cents != null) price.value = plainMoney(cents);
+      shopping.setPrice(groupId, item.id, cents);
+      // Anotar o preço já coloca o item no carrinho.
+      if (cents != null && !isBought) toggle(item, true);
+      else updateTotal(current());
+    });
+    price.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") price.blur();
+    });
+    price.addEventListener("blur", renderLater);
+
+    return h(
+      "li",
+      { class: `item market${isBought ? " bought" : ""}` },
+      h(
+        "label",
+        { class: "check" },
+        checkboxFor(item),
+        h(
+          "span",
+          {},
+          h("span", { class: "item-name" }, item.name),
+          details && h("span", { class: "item-details" }, details),
+          item.note && h("span", { class: "item-meta" }, item.note),
+        ),
+      ),
+      h("span", { class: "price" }, h("span", { "aria-hidden": "true" }, "R$"), price),
+    );
+  }
+
   await refresh();
+  if (shopping.pendingCount(groupId)) shopping.sync(groupId).then((sent) => sent && refresh()).catch(() => {});
   return { groupId, refresh, accepts: (n) => n.type === "item_added" || n.type === "items_changed" };
 }
 

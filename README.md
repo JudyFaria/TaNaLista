@@ -15,8 +15,15 @@ Listas de compras compartilhadas, pensadas para o celular.
   **pede para entrar**, e o dono **aceita ou recusa**.
 - **Busca:** encontre listas marcadas como "Aparecer na busca" e peça para entrar.
   Listas privadas só podem ser acessadas pelo link.
-- **Itens:** adicionar (com quantidade), marcar como comprado, remover e limpar os comprados.
+- **Itens:** adicionar com quantidade e medida (un, kg, g, L, ml, pacote, caixa, dúzia),
+  marca (opcional) e categoria (Hortifrúti, Açougue, Frios e laticínios, Padaria, Mantimentos,
+  Bebidas, Congelados, Limpeza, Higiene, Outros). A lista aparece separada por categoria.
+  Qualquer participante pode editar, remover, marcar como comprado e limpar os comprados.
   O app impede que um item pendente seja adicionado duas vezes.
+- **No mercado (funciona sem internet):** marque o que pegou e anote o valor pago; o total
+  é somado na hora. Os preços ficam só no aparelho. As marcações feitas sem internet
+  aparecem na hora e são enviadas à lista compartilhada quando a conexão volta. A última
+  versão das listas fica salva para abrir mesmo offline.
 - **Avisos em tempo real:** quando alguém adiciona um item, os outros participantes
   recebem um aviso na tela (ou uma notificação do sistema, se o app estiver em segundo plano).
 - **Gestão:** remover participantes, gerar um novo link (o antigo deixa de valer),

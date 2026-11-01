@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.domain.entities import Role
+from app.domain.entities import Category, Role, Unit
 
 
 # --- entrada ---------------------------------------------------------------- #
@@ -30,6 +30,9 @@ class GroupIn(BaseModel):
 class ItemIn(BaseModel):
     name: str = Field(max_length=80)
     quantity: str = Field(default="", max_length=30)
+    unit: Unit = Unit.UNIDADE
+    brand: str = Field(default="", max_length=40)
+    category: Category = Category.OUTROS
     note: str = Field(default="", max_length=140)
 
 
@@ -89,6 +92,9 @@ class ItemOut(BaseModel):
     id: str
     name: str
     quantity: str
+    unit: Unit
+    brand: str
+    category: Category
     note: str
     added_by: UserOut
     created_at: datetime

@@ -29,20 +29,15 @@ class ItemService:
         items.sort(key=lambda i: i.is_bought)
         return self._views(items)
 
-    def add_item(
-        self, actor_id: str, group_id: str, *, name: str, quantity: str = "", note: str = ""
-    ) -> ItemView:
+    def add_item(self, actor_id: str, group_id: str, **details) -> ItemView:
+        """``details``: name, quantity, unit, brand, category e note (ver ``ShoppingItem``)."""
         group = self._member_group(actor_id, group_id)
-        item = ShoppingItem.create(
-            group_id=group_id, name=name, quantity=quantity, note=note, added_by=actor_id
-        )
-        if any(not i.is_bought and i.same_name_as(item.name)
-               for i in self._items.list_by_group(group_id)):
-            raise ConflictError(f"“{item.name}” já está na lista.")
+        item = ShoppingItem.create(group_id=group_id, added_by=actor_id, **details)
+        self._ensure_not_duplicate(item)
         self._items.save(item)
 
         view = self._views([item])[0]
-        amount = f" ({item.quantity})" if item.quantity else ""
+        amount = f" ({item.quantity} {item.unit})" if item.quantity else ""
         self._notify_others(
             group,
             actor_id,
@@ -55,6 +50,19 @@ class ItemService:
             ),
         )
         return view
+
+    def update_item(self, actor_id: str, group_id: str, item_id: str, **details) -> ItemView:
+        group = self._member_group(actor_id, group_id)
+        item = self._get_item(group_id, item_id)
+        item.update_details(**details)
+        self._ensure_not_duplicate(item)
+        self._items.save(item)
+        self._notify_others(
+            group,
+            actor_id,
+            Notification(type="items_changed", title=group.name, body="", group_id=group.id),
+        )
+        return self._views([item])[0]
 
     def set_bought(self, actor_id: str, group_id: str, item_id: str, bought: bool) -> ItemView:
         group = self._member_group(actor_id, group_id)
@@ -101,6 +109,13 @@ class ItemService:
         group.ensure_member(actor_id)
         return group
 
+    def _ensure_not_duplicate(self, item: ShoppingItem) -> None:
+        if item.is_bought:
+            return
+        if any(other.id != item.id and not other.is_bought and other.same_name_as(item.name)
+               for other in self._items.list_by_group(item.group_id)):
+            raise ConflictError(f"“{item.name}” já está na lista.")
+
     def _get_item(self, group_id: str, item_id: str) -> ShoppingItem:
         item = self._items.get(item_id)
         if item is None or item.group_id != group_id:
@@ -123,6 +138,9 @@ class ItemService:
                 id=i.id,
                 name=i.name,
                 quantity=i.quantity,
+                unit=i.unit,
+                brand=i.brand,
+                category=i.category,
                 note=i.note,
                 added_by=view(i.added_by),
                 created_at=i.created_at,

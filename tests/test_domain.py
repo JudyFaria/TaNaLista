@@ -69,6 +69,16 @@ def test_invalid_usernames(username):
         User.create(username, "Nome", "hash")
 
 
+def test_item_without_new_fields_loads_with_defaults():
+    from app.infrastructure.persistence import mappers
+
+    old = mappers.item_to_dict(ShoppingItem.create(group_id="g", name="Café", added_by="ana"))
+    for key in ("brand", "unit", "category"):
+        del old[key]
+    item = mappers.item_from_dict(old)
+    assert (item.brand, item.unit, item.category) == ("", "un", "outros")
+
+
 def test_item_bought_cycle():
     item = ShoppingItem.create(group_id="g", name=" Café ", added_by="ana")
     assert item.name == "Café" and not item.is_bought

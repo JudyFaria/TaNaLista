@@ -41,6 +41,22 @@ export function field({ label, name, type = "text", hint, value, ...attrs }) {
   );
 }
 
+/** Lista de opções ([valor, rótulo]) com a opção atual marcada. */
+export function options(pairs, selected) {
+  return pairs.map(([value, label]) => h("option", { value, selected: value === selected }, label));
+}
+
+/** Seleção com rótulo associado. */
+export function selectField({ label, name, choices, value }) {
+  const id = `f-${name}-${++fieldSeq}`;
+  return h(
+    "div",
+    { class: "field" },
+    h("label", { for: id }, label),
+    h("select", { id, name }, options(choices, value)),
+  );
+}
+
 /** Checkbox com o rótulo clicável inteiro (alvo de toque grande). */
 export function checkbox({ label, name, checked, hint }) {
   return h(

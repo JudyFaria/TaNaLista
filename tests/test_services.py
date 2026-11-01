@@ -45,10 +45,10 @@ def test_full_flow_invite_approval_and_item_notification(services):
     assert services.events.of_type("request_approved")[0][0] == {mom}
 
     # Judy adiciona café: só a mãe é notificada (quem adicionou, não).
-    services.items.add_item(owner, group.id, name="Café", quantity="2 pacotes")
+    services.items.add_item(owner, group.id, name="Café", quantity="2", unit="pct")
     targets, notification = services.events.of_type("item_added")[0]
     assert targets == {mom}
-    assert notification.body == "Judy adicionou Café (2 pacotes)."
+    assert notification.body == "Judy adicionou Café (2 pct)."
 
 
 def test_duplicate_pending_item_is_rejected_but_allowed_after_bought(services):
@@ -61,6 +61,30 @@ def test_duplicate_pending_item_is_rejected_but_allowed_after_bought(services):
     services.items.set_bought(owner, group.id, item.id, True)
     services.items.add_item(owner, group.id, name="café")
     assert services.items.clear_bought(owner, group.id) == 1
+
+
+def test_item_details_can_be_edited_by_any_member(services):
+    owner = services.user("judy")
+    group = services.groups.create_group(owner, name="Casa", description="", is_public=True)
+    item = services.items.add_item(
+        owner, group.id, name="Sabão", brand="Omo", quantity="1", unit="kg", category="limpeza"
+    )
+    assert (item.brand, item.unit, item.category) == ("Omo", "kg", "limpeza")
+
+    services.items.add_item(owner, group.id, name="Leite")
+    with pytest.raises(ConflictError):
+        services.items.update_item(owner, group.id, item.id, name="leite")
+
+    updated = services.items.update_item(
+        owner, group.id, item.id, name="Sabão líquido", quantity="3", unit="l", category="limpeza"
+    )
+    assert (updated.name, updated.quantity, updated.unit, updated.brand) == ("Sabão líquido", "3", "l", "")
+    saved = {i.id: i for i in services.items.list_items(owner, group.id)}
+    assert saved[item.id].name == "Sabão líquido"
+    assert services.events.of_type("items_changed")[-1][0] == set()  # quem editou não é avisado
+
+    with pytest.raises(ValidationError):
+        services.items.update_item(owner, group.id, item.id, name="Sabão", category="feira")
 
 
 def test_search_only_returns_public_groups(services):
