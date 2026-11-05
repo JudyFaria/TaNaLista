@@ -1,9 +1,9 @@
 {
-  "name": "meu-primeiro-mcp",
+  "name": "tanalista-mcp",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Esqueleto de MCP server da aula 7 da PDA. Uma tool pronta, uma pra você escrever.",
+  "description": "MCP server do TáNaLista: lista os itens de uma lista de compras (somente leitura)",
   "scripts": {
     "start": "node server.mjs",
     "test": "node --test"

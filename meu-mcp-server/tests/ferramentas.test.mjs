@@ -86,7 +86,7 @@ test("remove instrução invisível e avisa", async () => {
 });
 
 test("remove zero-width, bidi e seletores de variação, mas mantém acentos e emoji", async () => {
-  const sujo = [{ name: "Fei​jão‮ \u{1F95A}\u{E0101}", quantity: "1⁠" }];
+  const sujo = [{ name: "Fei\u200Bjão\u202E \u{1F95A}\u{E0101}", quantity: "1\u2060" }];
   const { itens } = await chamar(fetchFalso(200, sujo).fn);
   assert.equal(itens[0].nome, "Feijão \u{1F95A}");
   assert.equal(itens[0].quantidade, "1");

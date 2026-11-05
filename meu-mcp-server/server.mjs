@@ -1,4 +1,4 @@
-// meu-primeiro-mcp: MCP server do TáNaLista .
+// tanalista-mcp: MCP server do TáNaLista .
 //
 // O que este arquivo faz: abre um MCP server que conversa por stdio
 // (entrada e saída padrão do processo) e oferece uma tool pro Claude Code:

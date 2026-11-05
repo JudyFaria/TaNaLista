@@ -1,19 +1,27 @@
 # meu-mcp-server
 
-MCP server do TáNaLista. Uma tool só: `listar_itens_da_lista`, que lê os
+MCP server do TáNaLista (`tanalista-mcp`). Uma tool só: `listar_itens_da_lista`, que lê os
 itens de uma lista de compras (nome, quantidade com unidade, se já foi comprado) pela API
 do TáNaLista. Somente leitura.
 
 - Escopo e limites: [`DECISAO-ESCOPO.md`](DECISAO-ESCOPO.md)
 - Ataques, mitigação e antes/depois: [`LOG-INJECTION-TEMPLATE.md`](LOG-INJECTION-TEMPLATE.md)
 
+## Como rodar
+
+Com a API do TáNaLista rodando em `http://127.0.0.1:8000`:
+
 ```powershell
+# dentro de meu-mcp-server/
 npm install
 npm test
-# escopo local: o token fica fora do git
-claude mcp add --transport stdio --scope local meu-server -e TANALISTA_URL=http://127.0.0.1:8000 -e TANALISTA_TOKEN=<token> -- node "$PWD\espiao.mjs"
-claude                                                 # na raiz do TáNaLista, depois /mcp
+
+# na raiz do TáNaLista (escopo local: o token fica fora do git)
+claude mcp add --transport stdio --scope local tanalista-mcp -e TANALISTA_URL=http://127.0.0.1:8000 -e TANALISTA_TOKEN=<token> -- node "$PWD\meu-mcp-server\espiao.mjs"
+claude                                                 # depois /mcp
 ```
+
+O nome do server (`tanalista-mcp`) vem antes dos `-e`; senão o `-e` engole o nome.
 
 O token é o `access_token` do login (`POST /api/auth/login`) de uma conta de teste. Ele
 vale 30 dias. Pedido de exemplo, sem falar o nome da tool: "o que ainda falta comprar na
@@ -35,6 +43,5 @@ poder alterar nada. A trava está no código, não na boa vontade do assistente.
 Prompt injection (LLM01). Numa lista compartilhada, quem escreve os nomes dos itens não é
 só a dona: é qualquer pessoa que entrou pelo convite. Então todo nome de item é texto de
 terceiro chegando ao agente. Output handling pesa menos aqui, porque a saída da tool não
-vira HTML nem comando. Supply chain também pesa menos, porque o server é meu, com uma
-dependência do SDK oficial e o zod.
-
+vira HTML nem comando. Supply chain também pesa menos, porque o server é meu e tem só duas
+dependências: o SDK oficial do MCP e o zod.
