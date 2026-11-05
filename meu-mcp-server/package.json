@@ -1,0 +1,18 @@
+{
+  "name": "meu-primeiro-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Esqueleto de MCP server da aula 7 da PDA. Uma tool pronta, uma pra você escrever.",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.1.0",
+    "zod": "^4.2.0"
+  }
+}
