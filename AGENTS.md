@@ -15,7 +15,7 @@ Clean architecture (`domain` ← `application` ← `infrastructure`/`presentatio
 - Privacidade: não membro recebe 404, não 403. Pedidos de entrada pendentes só o dono vê.
 - Persistência dupla (Firestore em produção, JSON local). Todo comportamento novo de persistência deve funcionar nos dois e no `tests/fake_firestore.py`.
 - Campo novo em entidade: atualize `entities.py`, `mappers.py`, `dto.py`, `schemas.py`, rotas e views JS.
-- `event_broker.py` é em memória: só funciona com um processo.
+- `event_broker.py` é em memória: só funciona com um processo. Na Vercel há várias instâncias e as conexões SSE são cortadas em 300 s, então os avisos em tempo real são melhor esforço (os dados continuam corretos, vindos do Firestore).
 
 ## Frontend
 - Texto do usuário só entra no DOM via `textContent` (helper `h()` em `js/dom.js`). CSP estrita: sem script ou estilo inline.
@@ -23,7 +23,7 @@ Clean architecture (`domain` ← `application` ← `infrastructure`/`presentatio
 - Ao criar ou renomear arquivo do frontend, atualize `SHELL` em `sw.js`; ao mudar assets do shell, incremente `CACHE` (`compras-vN`).
 
 ## Deploy
-Render, automático a cada push na `main`. Sem `FIREBASE_CREDENTIALS` o app não sobe em produção.
+Vercel, automático a cada push na `main`. Sem `FIREBASE_CREDENTIALS` e `APP_SECRET_KEY` o app não sobe em produção.
 
 ## Regras de trabalho
 - Tarefa pronta só quando `pytest` passa (roda os dois backends).

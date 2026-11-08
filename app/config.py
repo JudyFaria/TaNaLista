@@ -38,20 +38,27 @@ class Settings:
                 "reinício, então listas e itens seriam perdidos. Defina FIREBASE_CREDENTIALS "
                 "com a chave da conta de serviço do Firebase."
             )
+        secret_key = os.getenv("APP_SECRET_KEY")
+        if not secret_key and _has_ephemeral_disk():
+            raise RuntimeError(
+                "Chave de assinatura não configurada. Neste servidor o disco é somente "
+                "leitura e cada instância teria uma chave diferente, derrubando os logins. "
+                "Defina APP_SECRET_KEY com um valor secreto longo."
+            )
         return cls(
             data_dir=data_dir,
-            secret_key=os.getenv("APP_SECRET_KEY") or _local_secret(data_dir),
+            secret_key=secret_key or _local_secret(data_dir),
             token_ttl=timedelta(days=int(os.getenv("APP_TOKEN_TTL_DAYS", "30"))),
             firebase_credentials=firebase_credentials,
         )
 
 
 def _has_ephemeral_disk() -> bool:
-    """Hospedagens cujo disco não sobrevive a reinícios/deploys (Render define ``RENDER``).
+    """Hospedagens cujo disco não sobrevive a reinícios/deploys (a Vercel define ``VERCEL``).
 
     ``APP_REQUIRE_DATABASE=1`` força a mesma verificação em outros provedores.
     """
-    return bool(os.getenv("RENDER") or os.getenv("APP_REQUIRE_DATABASE"))
+    return bool(os.getenv("VERCEL") or os.getenv("APP_REQUIRE_DATABASE"))
 
 
 def _local_secret(data_dir: Path) -> str:
